@@ -1,0 +1,10 @@
+# Vercel CLI link (project/org IDs)
+.vercel
+
+# Impeccable local tool state (critique snapshots, cache)
+.impeccable
+
+# macOS / editor cruft
+.DS_Store
+*.swp
+node_modules

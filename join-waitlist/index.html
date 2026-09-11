@@ -22,106 +22,373 @@
   <meta name="twitter:image" content="https://pouncity.vercel.app/og.png">
   <meta name="theme-color" content="#FFC93C">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2213%22 fill=%22%23FF6B4A%22/><path d=%22M4 12 Q16 20 28 10 M3 18 Q16 25 28 17 M6 25 Q17 29 25 22 M7 7 Q18 6 27 13%22 stroke=%22%23D8492B%22 stroke-width=%222%22 fill=%22none%22 stroke-linecap=%22round%22/><path d=%22M27 20 Q33 21 30 28%22 stroke=%22%23FF6B4A%22 stroke-width=%222.4%22 fill=%22none%22 stroke-linecap=%22round%22/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
+  <script>
+    /* Preloader gate: decide before first paint. First visit + motion OK only. */
+    (function(){try{
+      if(!matchMedia('(prefers-reduced-motion: reduce)').matches
+        && localStorage.getItem('pouncity_seen') !== '1'){
+        document.documentElement.classList.add('pl');
+      }
+    }catch(e){}})();
+  </script>
 <style>
   :root{
     --sun:#FFC93C;
-    --ink:#161616;
+    --sun-ghost:#8F6500;      /* 3.4:1 on sun — tonal poster type, AA-large */
     --cream:#FFF7E6;
-    --coral-text:#BF3A22;   /* deep coral, AA on cream/white (5.1:1) — for coral text on light surfaces */
+    --panel:#FFFDF6;
+    --coral:#FF6B4A;
+    --coral-ghost:#7E1F0A;    /* 3.6:1 on coral — tonal ghost type */
+    --coral-text:#BF3A22;     /* 5.1:1 on cream — coral for text on light */
+    --ink:#161616;
+    --dome:clamp(26px,7vw,96px);
     color-scheme:light;
   }
   *{box-sizing:border-box}
-  html{margin:0;padding:0}
+  html{margin:0;padding:0;scrollbar-color:var(--ink) transparent}
+  ::-webkit-scrollbar{width:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--ink);border-radius:99px;border:3px solid var(--sun)}
   body{
     margin:0;padding:0;
-    min-height:100dvh;
-    display:flex;flex-direction:column;
     background:var(--sun);
     color:var(--ink);
     font-family:"DM Sans",-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
-    font-size:16px;
-    line-height:1.5;
+    font-size:16px;line-height:1.5;
+    overflow-x:clip;
+    caret-color:var(--coral-text);
   }
   img,svg{max-width:100%}
   [hidden]{display:none!important}
-  .mono{font-family:"DM Mono","SF Mono",Consolas,monospace}
   ::selection{background:var(--ink);color:var(--sun)}
+  .mono{font-family:"DM Mono","SF Mono",Consolas,monospace}
+  a{color:inherit}
+  :focus-visible{outline:3px solid var(--ink);outline-offset:3px;border-radius:6px}
+  .s-join :focus-visible{outline-color:var(--sun)}
 
-  /* ---------- header ---------- */
-  header{
-    display:flex;align-items:center;justify-content:space-between;
-    flex-wrap:wrap;gap:10px 16px;
-    padding:14px clamp(20px,4vw,44px);
+  /* ============ preloader ============ */
+  .loader{
+    display:none;
+    position:fixed;inset:0;z-index:1000;
+    background:var(--sun);
+    flex-direction:column;align-items:center;justify-content:center;gap:8vh;
+    padding:24px;text-align:center;
+    border-radius:0 0 50% 50% / 0 0 0 0;
+    transition:transform .65s cubic-bezier(.65,.02,.35,1),border-radius .65s cubic-bezier(.65,.02,.35,1);
   }
+  html.pl .loader{display:flex}
+  html.pl.pl-out .loader{transform:translateY(-102%);border-radius:0 0 50% 50% / 0 0 120px 120px}
+  html.pl{overflow:hidden}
+  html.pl.pl-gone{overflow:visible}
+  html.pl.pl-gone .loader{display:none}
+  .loader-count{
+    font-family:"Fredoka",sans-serif;font-weight:700;
+    font-size:clamp(2.6rem,10vw,7.5rem);line-height:1;letter-spacing:-.01em;
+    text-transform:uppercase;
+  }
+  .loader-line{
+    font-weight:700;font-size:clamp(.82rem,2.4vw,1.05rem);
+    letter-spacing:.14em;text-transform:uppercase;max-width:34ch;
+    color:var(--sun-ghost);
+  }
+
+  /* ============ header ============ */
+  header{
+    position:absolute;top:0;left:0;right:0;z-index:40;
+    display:flex;align-items:center;justify-content:space-between;gap:12px 18px;
+    padding:16px clamp(20px,4vw,48px);
+  }
+  html.motion header{position:fixed}
   .wordmark{
     font-family:"Fredoka",sans-serif;font-weight:700;font-size:1.4rem;
     letter-spacing:-.01em;display:flex;align-items:baseline;gap:4px;
+    color:var(--ink);text-decoration:none;
+    transition:color .4s ease;
   }
+  header[data-on="dark"] .wordmark{color:var(--cream)}
+  header[data-on="coral"] .join-pill{background:var(--cream)}
+  header[data-on="dark"] .join-pill{border-color:var(--cream)}
   .wordmark .dot{width:16px;height:14px;display:inline-block;line-height:0}
   .wordmark .dot svg{width:100%;height:100%;display:block}
-  .coming{
-    font-family:"DM Mono",monospace;font-size:.72rem;letter-spacing:.16em;
-    text-transform:uppercase;border:2px solid var(--ink);border-radius:999px;
-    padding:6px 13px;font-weight:500;
+  .join-pill{
+    display:inline-block;text-decoration:none;
+    font:600 .95rem "Fredoka",sans-serif;letter-spacing:.01em;
+    color:var(--ink);background:var(--coral);
+    border:2.5px solid var(--ink);border-radius:999px;
+    padding:11px 22px;
+    transition:transform .15s ease;
   }
+  .join-pill:hover{transform:translateY(-2px)}
+  .join-pill:active{transform:translateY(0)}
 
-  /* ---------- hero (fills the rest of the viewport) ---------- */
-  main{flex:1;display:flex;flex-direction:column;min-height:0}
-  .hero{
-    position:relative;overflow:hidden;flex:1;
+  /* ============ sections & domes ============ */
+  main{position:relative}
+  section{position:relative}
+  .dome{
+    border-radius:50% 50% 0 0 / var(--dome) var(--dome) 0 0;
+    margin-top:calc(-1 * var(--dome));
+  }
+  .s-hero{z-index:1}
+  .s-does{z-index:2;background:var(--cream)}
+  .s-how{z-index:3;background:var(--coral)}
+  .s-join{z-index:4;background:var(--ink);color:var(--cream)}
+
+  /* ============ hero ============ */
+  .s-hero{
+    min-height:100svh;
     display:flex;flex-direction:column;
-    padding-bottom:clamp(76px,15vh,128px);
+    padding:calc(72px + 2vh) clamp(20px,4vw,48px) calc(var(--dome) + 4vh);
+    overflow:clip;
   }
-  .hero-inner{
-    width:100%;max-width:1180px;margin:0 auto;
-    padding:clamp(6px,1.6vh,22px) clamp(20px,4vw,44px) 0;
-    display:flex;flex-direction:column;gap:clamp(12px,2.2vh,20px);
+  .hero-stage{
+    position:relative;flex:1;
+    display:flex;flex-direction:column;align-items:center;
+    max-width:1280px;width:100%;margin:0 auto;
   }
-  .eyebrow{
-    font-family:"DM Mono",monospace;font-size:.74rem;font-weight:500;
-    letter-spacing:.18em;text-transform:uppercase;margin:0;
+  h1.poster{
+    font-family:"Fredoka",sans-serif;font-weight:700;
+    font-size:clamp(2.75rem,11.5vw,9.5rem);
+    line-height:.96;letter-spacing:-.015em;
+    text-transform:uppercase;text-align:center;
+    color:var(--sun-ghost);
+    margin:2vh 0 0;
+    position:relative;z-index:1;
   }
-  h1{
-    font-family:"Fredoka",sans-serif;font-weight:600;
-    font-size:clamp(1.9rem,4.6vw,3.3rem);
-    line-height:1.04;letter-spacing:-.015em;margin:0;
-    text-wrap:balance;max-width:14ch;
+  /* balance breaks wrapping once SplitText inline-blocks the words */
+  html:not(.motion) h1.poster{text-wrap:balance}
+  .hero-word{display:inline-block}
+  .hero-sub{
+    position:relative;z-index:3;
+    align-self:flex-start;
+    max-width:38ch;
+    margin:auto 0 0;
+    font-size:clamp(1rem,1.4vw,1.15rem);font-weight:500;
   }
-  .sub{font-size:1.05rem;max-width:52ch;margin:0;font-weight:500}
+  .hero-sub p{margin:0 0 18px}
+  .hero-cta{
+    display:inline-block;text-decoration:none;
+    font:600 1.05rem "Fredoka",sans-serif;
+    color:var(--ink);background:var(--coral);
+    border:2.5px solid var(--ink);border-radius:999px;
+    padding:14px 30px;
+    transition:transform .15s ease;
+  }
+  .hero-cta:hover{transform:translateY(-2px)}
+  .hero-cta:active{transform:translateY(0)}
+  .bigdog-wrap{
+    position:absolute;bottom:calc(-8vh - var(--dome));right:clamp(-30px,5vw,110px);
+    width:clamp(320px,45vw,700px);
+    z-index:2;line-height:0;pointer-events:none;
+  }
+  .bigdog .head-all{transform-box:fill-box;transform-origin:50% 100%}
+  html.motion .bigdog .head-all{animation:sway 7s ease-in-out infinite}
+  @keyframes sway{0%,100%{transform:rotate(-1.3deg)}50%{transform:rotate(1.3deg)}}
+  /* WAG! — the hero dog acts out the cursor word */
+  .hero-tail{
+    position:absolute;right:-7%;bottom:0;width:21%;line-height:0;
+    transform-origin:18% 96%;
+    animation:wagbig .6s ease-in-out infinite;
+  }
+  @keyframes wagbig{0%,100%{transform:rotate(-9deg)}50%{transform:rotate(13deg)}}
+  .cue{
+    display:flex;align-items:center;gap:8px;
+    margin:18px 0 0 6px;
+    font:600 .85rem "DM Sans",sans-serif;letter-spacing:.06em;
+  }
+  .cue svg{width:16px;height:20px}
+  html.motion .cue svg{animation:cuebob 1.6s ease-in-out infinite}
+  @keyframes cuebob{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
+  .toy{position:absolute;line-height:0;z-index:1;pointer-events:none}
+  .toy-yarn{top:4%;right:8%;width:clamp(44px,5.5vw,84px)}
+  .toy-ball{top:34%;left:4%;width:clamp(40px,5vw,74px)}
+  .toy-bone{top:56%;right:3%;width:clamp(52px,6.5vw,96px)}
 
-  /* survey card */
-  .signup{position:relative;max-width:540px;margin-top:30px}
-  .peek{
-    position:absolute;top:-36px;left:34px;width:102px;z-index:0;
-    animation:peekbob 4.5s ease-in-out infinite;
+  /* ============ what pouncity does ============ */
+  .s-does{padding:calc(var(--dome) + 6vh) clamp(20px,4vw,48px) 10vh;overflow:clip}
+  .does-inner{position:relative;z-index:1;max-width:1180px;margin:0 auto}
+  .does-ghost{
+    position:absolute;top:34%;left:50%;transform:translateX(-50%);
+    z-index:0;white-space:nowrap;pointer-events:none;
+    font-family:"Fredoka",sans-serif;font-weight:700;
+    font-size:clamp(3rem,11vw,9rem);letter-spacing:-.01em;text-transform:uppercase;
+    color:#F1E3C2;
   }
+  .s-does h2{
+    font-family:"Fredoka",sans-serif;font-weight:700;
+    font-size:clamp(2.2rem,6.5vw,5rem);line-height:1.02;letter-spacing:-.015em;
+    margin:0 0 clamp(48px,9vh,110px);max-width:14ch;
+    position:relative;z-index:2;
+  }
+  .clowder{
+    position:absolute;right:0;top:-2vh;z-index:1;line-height:0;
+    width:clamp(200px,22vw,300px);
+  }
+  .clowder svg{overflow:visible}
+  .leash{
+    position:absolute;inset:0;z-index:0;pointer-events:none;
+  }
+  .leash svg{width:100%;height:100%;display:block}
+  .leash path{vector-effect:non-scaling-stroke}
+  .does-list{
+    list-style:none;margin:0;padding:0;position:relative;z-index:2;
+    display:flex;flex-direction:column;gap:clamp(44px,8vh,96px);
+  }
+  .row{
+    display:flex;align-items:center;gap:clamp(20px,3vw,44px);
+    max-width:760px;
+  }
+  .row:nth-child(even){flex-direction:row-reverse;margin-left:auto;text-align:right}
+  .row .prop{flex:none;width:clamp(64px,8vw,104px);line-height:0}
+  .row p{
+    margin:0;
+    font-family:"Fredoka",sans-serif;font-weight:600;
+    font-size:clamp(1.45rem,3.1vw,2.5rem);line-height:1.12;letter-spacing:-.01em;
+  }
+  .more-line{
+    position:relative;z-index:2;
+    margin:clamp(40px,7vh,80px) 0 0;
+    display:flex;align-items:center;gap:14px;
+    font-style:italic;font-weight:500;font-size:1.05rem;color:var(--coral-text);
+  }
+  .more-line .paws{display:flex;gap:10px;line-height:0}
+  .more-line .paws svg{width:22px;height:20px}
+  html.motion .more-line .paws svg{animation:pawpop 2.8s ease-in-out infinite}
+  html.motion .more-line .paws svg:nth-child(2){animation-delay:.4s}
+  html.motion .more-line .paws svg:nth-child(3){animation-delay:.8s}
+  @keyframes pawpop{0%,100%{transform:translateY(0)}12%{transform:translateY(-5px)}24%{transform:translateY(0)}}
+  .stander{
+    position:relative;z-index:2;
+    margin:clamp(28px,5vh,56px) 0 0 auto;
+    width:clamp(120px,13vw,170px);line-height:0;
+  }
+  /* SNIFF — the stander dog noses the ground at the leash end */
+  .stander .dog.idle .dog-all{
+    transform-origin:78% 100%;
+    animation-name:sniffcycle;animation-duration:6s;
+  }
+  @keyframes sniffcycle{
+    0%,30%,100%{transform:rotate(0) translateY(0)}
+    36%{transform:rotate(9deg) translateY(3px)}
+    41%{transform:rotate(6deg) translateY(2px)}
+    46%{transform:rotate(10deg) translateY(3px)}
+    54%{transform:rotate(0) translateY(0)}
+    74%{transform:translateY(0)}
+    79%{transform:translateY(-13px)}
+    84%{transform:translateY(0)}
+    88%{transform:translateY(-6px)}
+    92%{transform:translateY(0)}
+  }
+
+  /* ============ how joining works ============ */
+  .s-how{padding:calc(var(--dome) + 7vh) clamp(20px,4vw,48px) calc(var(--dome) + 16vh);overflow:clip}
+  .how-inner{position:relative;max-width:1180px;margin:0 auto;z-index:2}
+  .how-ghost{
+    position:absolute;top:38%;left:50%;transform:translateX(-50%);
+    z-index:1;white-space:nowrap;
+    font-family:"Fredoka",sans-serif;font-weight:700;
+    font-size:clamp(3rem,12vw,10rem);letter-spacing:-.01em;text-transform:uppercase;
+    color:var(--coral-ghost);opacity:.4;pointer-events:none;
+  }
+  .s-how h2{
+    font-family:"Fredoka",sans-serif;font-weight:700;
+    font-size:clamp(2.2rem,6.5vw,5rem);line-height:1.02;letter-spacing:-.015em;
+    margin:0 0 clamp(44px,8vh,96px);
+  }
+  .steps-wrap{
+    display:flex;gap:clamp(24px,4vw,56px);align-items:flex-start;
+    flex-wrap:wrap;
+  }
+  .step{
+    flex:1 1 340px;max-width:520px;
+    background:var(--panel);border:2.5px solid var(--ink);border-radius:26px;
+    padding:clamp(24px,3vw,40px);
+    rotate:-1.4deg;
+  }
+  .step + .step{rotate:1.6deg;margin-top:clamp(20px,4vh,64px)}
+  .step-num{
+    font-family:"Fredoka",sans-serif;font-weight:700;font-size:clamp(2.4rem,5vw,4rem);
+    line-height:1;color:var(--coral-text);
+    font-feature-settings:"tnum";
+  }
+  .step h3{
+    font-family:"Fredoka",sans-serif;font-weight:600;
+    font-size:clamp(1.5rem,2.6vw,2.1rem);line-height:1.1;letter-spacing:-.01em;
+    margin:10px 0 12px;
+  }
+  .step p{margin:0;font-size:1rem;font-weight:500;max-width:38ch}
+  /* SIT. — a dog demonstrates, tail thumping on the ground */
+  .sitter{
+    position:relative;z-index:2;line-height:0;
+    width:clamp(140px,15vw,196px);
+    margin:clamp(28px,5vh,52px) 0 0 clamp(4px,3vw,44px);
+  }
+  .sitter .sittail{
+    transform-box:fill-box;transform-origin:92% 88%;
+    animation:thump 2.6s ease-in-out infinite;
+  }
+  @keyframes thump{0%,48%,100%{transform:rotate(0)}56%{transform:rotate(-16deg)}64%{transform:rotate(0)}72%{transform:rotate(-16deg)}80%{transform:rotate(0)}}
+  .sitter .ear{transform-box:fill-box;transform-origin:12% 78%;animation:sitflick 5.4s ease-in-out infinite}
+  @keyframes sitflick{0%,64%,76%,100%{transform:rotate(0)}70%{transform:rotate(-26deg)}}
+  .lane{position:absolute;left:0;right:0;bottom:calc(var(--dome) + 6px);z-index:1;pointer-events:none}
+  html:not(.motion) .lane{display:none}
+  .runner{display:flex;align-items:flex-end;gap:6px;width:max-content;line-height:0;transform:translateX(-40vw)}
+  .runner svg{width:clamp(96px,10vw,132px)}
+  .runner .catwalk{width:clamp(82px,8.6vw,112px)}
+
+  /* ============ join / close ============ */
+  .s-join{padding:calc(var(--dome) + 9vh) clamp(20px,4vw,48px) 0;scroll-margin-top:40px;overflow:clip}
+  .join-ghost{
+    position:absolute;top:12%;left:50%;transform:translateX(-50%);
+    z-index:0;white-space:nowrap;pointer-events:none;
+    font-family:"Fredoka",sans-serif;font-weight:700;
+    font-size:clamp(3rem,12vw,10rem);letter-spacing:-.01em;text-transform:uppercase;
+    color:#2B2B2B;
+  }
+  .join-inner{
+    position:relative;z-index:1;
+    max-width:1180px;margin:0 auto;
+    display:flex;flex-direction:column;align-items:center;text-align:center;
+  }
+  .s-join h2{
+    font-family:"Fredoka",sans-serif;font-weight:700;
+    font-size:clamp(2.6rem,8vw,6.5rem);line-height:.98;letter-spacing:-.015em;
+    color:var(--sun);margin:0 0 clamp(40px,7vh,80px);
+    text-transform:uppercase;
+  }
+  html:not(.motion) .s-join h2{text-wrap:balance}
+  .join-word{display:inline-block}
+  .signup{position:relative;max-width:560px;width:100%;margin-bottom:12vh}
+  .peek{
+    position:absolute;top:-64px;left:36px;width:112px;z-index:0;line-height:0;
+  }
+  html:not(.motion) .peek{animation:peekbob 4.5s ease-in-out infinite}
+  /* JOIN — the peek dog pops up to join the party when the section arrives */
+  html.motion .s-join .peek{transform:translateY(50px)}
+  html.motion .s-join.act .peek{animation:peekpop .7s cubic-bezier(.3,1.5,.5,1) both,peekbob 4.5s ease-in-out .8s infinite}
+  @keyframes peekpop{from{transform:translateY(50px)}to{transform:translateY(0)}}
   @keyframes peekbob{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
   .survey-card{
-    position:relative;z-index:1;
-    background:var(--cream);border:2.5px solid var(--ink);border-radius:20px;
-    padding:16px 20px;display:flex;flex-direction:column;gap:12px;
+    position:relative;z-index:1;text-align:left;
+    background:var(--panel);color:var(--ink);
+    border:2.5px solid var(--ink);border-radius:24px;
+    padding:clamp(22px,3vw,32px);
+    display:flex;flex-direction:column;gap:14px;
   }
-  .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
-  .steps li{
-    display:flex;gap:12px;align-items:baseline;
-    font-size:.82rem;font-weight:500;line-height:1.4;
-  }
-  .steps .n{color:var(--coral-text);font-weight:700;font-feature-settings:"tnum";flex:none}
   .cta{
     align-self:flex-start;display:inline-block;text-decoration:none;
-    padding:12px 26px;border-radius:999px;border:2.5px solid var(--ink);
-    background:var(--ink);color:var(--sun);
-    font:600 1rem "Fredoka",sans-serif;letter-spacing:.01em;
-    cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;
+    padding:15px 30px;border-radius:999px;border:2.5px solid var(--ink);
+    background:var(--coral);color:var(--ink);
+    font:600 1.06rem "Fredoka",sans-serif;letter-spacing:.01em;
+    cursor:pointer;transition:transform .15s ease;
   }
-  .cta:hover{transform:translateY(-2px);box-shadow:0 5px 0 rgba(22,22,22,.28)}
-  .cta:active{transform:translateY(0);box-shadow:none}
+  .cta:hover{transform:translateY(-2px)}
+  .cta:active{transform:translateY(0)}
   .cta:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
   .ok{display:flex;align-items:center;gap:12px;font-weight:700;font-size:.95rem;margin:0}
-  .ball{
-    width:30px;height:27px;flex:none;line-height:0;
-  }
+  .ball{width:30px;height:27px;flex:none;line-height:0}
   .ball svg{width:100%;height:100%}
   .celebrate .ball{animation:ballin 1.5s cubic-bezier(.34,.6,.4,1) both}
   @keyframes ballin{
@@ -132,48 +399,41 @@
     84%{transform:translate(-2.5vw,-20px) rotate(-60deg)}
     92%,100%{transform:translate(0,0) rotate(0)}
   }
-  .fineprint{font-size:.8rem;margin:0;opacity:.78}
+  .celebrate .bigdog .eye{animation:eyepop .55s ease-in-out 3}
+  @keyframes eyepop{0%,100%{transform:scale(1)}50%{transform:scale(1.28)}}
+  .fineprint{font-size:.82rem;margin:0;color:#4c4638}
+  footer{
+    width:100%;
+    display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    padding:18px 0 max(18px,env(safe-area-inset-bottom));
+    border-top:1.5px solid rgba(255,247,230,.22);
+  }
+  footer .wordmark{font-size:1.05rem;color:var(--cream)}
+  footer .wordmark .dot{width:13px;height:11px}
+  footer small{font-family:"DM Mono",monospace;font-size:.64rem;letter-spacing:.08em;color:var(--cream)}
 
-  /* what Pouncity does */
-  .does{max-width:560px;margin-top:24px;display:flex;flex-direction:column;gap:11px}
-  .does-label{font-size:.72rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;opacity:.7;margin:0}
-  .does-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
-  .does-list li{display:flex;gap:11px;align-items:baseline;font-size:1rem;font-weight:500;line-height:1.35}
-  .does-list .ico{flex:none;width:1.5em;text-align:center}
-  .does-list .more{opacity:.68;font-style:italic}
-
-  /* compact mode: fit everything (incl. footer) on short laptops */
-  @media (max-height:800px){
-    header{padding:10px clamp(20px,4vw,44px)}
-    .hero{padding-bottom:clamp(52px,9vh,92px)}
-    .hero-inner{gap:9px;padding-top:8px}
-    h1{font-size:clamp(1.8rem,4vw,2.7rem);line-height:1}
-    .sub{font-size:1rem}
-    .signup{margin-top:11px}
-    .peek{display:none}
-    .survey-card{padding:12px 18px;gap:8px}
-    .does{margin-top:11px;gap:7px}
-    .does-list{gap:6px}
-    footer{padding:9px clamp(20px,4vw,44px)}
+  /* ============ cursor ============ */
+  .cur{
+    position:fixed;top:0;left:0;z-index:900;pointer-events:none;
+    mix-blend-mode:difference;display:none;
+  }
+  html.motion .cur{display:block}
+  @media (pointer:coarse){html.motion .cur{display:none}}
+  .cur span{
+    position:fixed;top:0;left:0;color:#fff;
+    font:500 .82rem "DM Mono",monospace;letter-spacing:0;
+    will-change:transform;opacity:0;
+    transition:opacity .22s ease;
   }
 
-  /* standing dog on the ground line */
-  .stander{
-    position:absolute;bottom:6px;left:56%;z-index:0;line-height:0;
-    width:clamp(110px,11vw,150px);
-  }
-  .dog.idle .dog-all{animation:idlehop 4.6s ease-in-out infinite}
-  @keyframes idlehop{0%,50%,72%,100%{transform:translateY(0)}56%{transform:translateY(-14px)}62%{transform:translateY(0)}67%{transform:translateY(-8px)}}
-  .dog.idle .ear{animation:idleear 4.6s ease-in-out infinite}
-  @keyframes idleear{0%,50%,74%,100%{transform:rotate(0)}56%,67%{transform:rotate(-32deg)}}
-  .dog.idle .tail{animation:wagslow .55s ease-in-out infinite}
-
-  /* cat cluster with doodles, right side */
-  .clowder{
-    position:absolute;right:9%;top:13%;z-index:0;line-height:0;
-    width:clamp(250px,26vw,350px);
-  }
-  .clowder svg{overflow:visible}
+  /* ============ shared character animation ============ */
+  .eye{transform-box:fill-box;transform-origin:center}
+  html.motion .eye,html:not(.motion) .eye{animation:blink 5.6s ease-in-out infinite}
+  .eye .pp{transform-box:fill-box}
+  @keyframes blink{0%,94.5%,100%{transform:scaleY(1)}96.6%{transform:scaleY(.06)}}
+  .bigdog .eye{animation-duration:7.3s}
+  .peek .eye{animation-duration:4.7s;animation-delay:.9s}
+  .stander .eye{animation-duration:6.4s;animation-delay:1.7s}
   .clowder .tail{transform-box:fill-box;transform-origin:0% 100%;animation:flick 3.4s ease-in-out infinite}
   .clowder .tailA{transform-origin:100% 100%;animation-delay:1.1s}
   @keyframes flick{0%,100%{transform:rotate(0)}55%{transform:rotate(-16deg)}68%{transform:rotate(-9deg)}80%{transform:rotate(-18deg)}}
@@ -182,57 +442,16 @@
   @keyframes bubbob{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-8px) rotate(2.5deg)}}
   .qmark{transform-box:fill-box;transform-origin:50% 100%;animation:qwig 5.2s ease-in-out infinite}
   @keyframes qwig{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(8deg)}}
-  .tick{transform-box:fill-box;transform-origin:center;animation:tickp 2.6s ease-in-out infinite}
-  .tick2{animation-delay:-1.3s}
-  @keyframes tickp{0%,100%{transform:scale(1);opacity:.75}50%{transform:scale(1.2);opacity:1}}
-  /* 721-900px: shrink the cat cluster and tuck it top-right so the right
-     side isn't empty; only drop it once the layout goes single-column. */
-  @media (max-width:900px){.clowder{width:clamp(150px,22vw,195px);right:1%;top:3%}}
-  @media (max-width:900px) and (min-width:721px){.sub{max-width:40ch}}
-  @media (max-width:720px){.clowder{display:none}}
-
-  /* big dog, bottom-right of hero */
-  .bigdog-wrap{
-    position:absolute;right:clamp(0px,3vw,60px);bottom:-1px;
-    width:clamp(190px,24vw,340px);pointer-events:none;line-height:0;
-  }
-  .bigdog .head-all{
-    transform-box:fill-box;transform-origin:50% 100%;
-    animation:sway 7s ease-in-out infinite;
-  }
-  @keyframes sway{0%,100%{transform:rotate(-1.4deg)}50%{transform:rotate(1.4deg)}}
-  .celebrate .bigdog .eye{animation:eyepop .55s ease-in-out 3}
-  @keyframes eyepop{0%,100%{transform:scale(1)}50%{transform:scale(1.28)}}
-
-  /* runner lane */
-  .lane{position:absolute;left:0;bottom:8px;width:100%;pointer-events:none}
-  .runner{
-    display:flex;align-items:flex-end;gap:2px;width:max-content;line-height:0;
-    transform:translateX(-60vw);
-    animation:dash 17s linear 1.4s infinite;
-  }
-  .runner svg{width:clamp(96px,10vw,126px)}
-  .runner .catwalk{width:clamp(84px,8.8vw,110px)}
-  @keyframes dash{
-    0%{transform:translateX(-60vw)}
-    54%{transform:translateX(112vw)}
-    54.01%,100%{transform:translateX(112vw)}
-  }
-
-  /* ---------- shared character animation ---------- */
-  .eye{transform-box:fill-box;transform-origin:center;animation:blink 5.6s ease-in-out infinite}
-  .eye .pp{transform-box:fill-box}
-  @keyframes blink{0%,94.5%,100%{transform:scaleY(1)}96.6%{transform:scaleY(.06)}}
-  .bigdog .eye{animation-duration:7.3s}
-  .peek .eye{animation-duration:4.7s;animation-delay:.9s}
-  .stander .eye{animation-duration:6.4s;animation-delay:1.7s}
-
   .dog .leg{transform-box:fill-box;transform-origin:50% 10%}
   .dog .tail{transform-box:fill-box;transform-origin:100% 100%;animation:wagslow 1.5s ease-in-out infinite}
   @keyframes wagslow{0%,100%{transform:rotate(0)}50%{transform:rotate(14deg)}}
   .dog .ear{transform-box:fill-box;transform-origin:12% 78%}
   .dog-all{transform-box:fill-box;transform-origin:50% 100%}
-
+  .dog.idle .dog-all{animation:idlehop 4.6s ease-in-out infinite}
+  @keyframes idlehop{0%,50%,72%,100%{transform:translateY(0)}56%{transform:translateY(-14px)}62%{transform:translateY(0)}67%{transform:translateY(-8px)}}
+  .dog.idle .ear{animation:idleear 4.6s ease-in-out infinite}
+  @keyframes idleear{0%,50%,74%,100%{transform:rotate(0)}56%,67%{transform:rotate(-32deg)}}
+  .dog.idle .tail{animation:wagslow .55s ease-in-out infinite}
   .dog.run .l1,.dog.run .l3{animation:trot .38s ease-in-out infinite}
   .dog.run .l2,.dog.run .l4{animation:trot .38s ease-in-out -.19s infinite}
   @keyframes trot{0%,100%{transform:rotate(26deg)}50%{transform:rotate(-22deg)}}
@@ -242,260 +461,589 @@
   .dog.run .ear{animation:flap .38s ease-in-out infinite}
   @keyframes flap{0%,100%{transform:rotate(0)}50%{transform:rotate(-26deg)}}
 
-  /* ---------- footer ---------- */
-  footer{
-    background:var(--ink);color:var(--sun);
-    padding:12px clamp(20px,4vw,44px) max(12px,env(safe-area-inset-bottom));
-    display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  /* ============ responsive ============ */
+  @media (max-width:900px){
+    .clowder{width:clamp(150px,20vw,200px);top:-1vh}
+    .leash{display:none}
   }
-  footer .wordmark{font-size:1.05rem}
-  footer .wordmark .dot{width:13px;height:11px}
-  footer small{font-family:"DM Mono",monospace;font-size:.64rem;letter-spacing:.08em}
-
   @media (max-width:720px){
-    .bigdog-wrap{width:170px;right:-22px;opacity:.95}
-    .stander{left:12px;width:100px;bottom:4px}
-    h1{max-width:none}
-    .cta{align-self:stretch;text-align:center}
+    .clowder{display:none}
+    .row,.row:nth-child(even){
+      flex-direction:column;align-items:flex-start;text-align:left;margin-left:0;gap:14px;
+    }
+    .row:nth-child(even){align-items:flex-end;text-align:right}
+    .bigdog-wrap{width:min(88vw,420px);left:50%;right:auto;transform:translateX(-50%)}
+    .hero-stage{padding-bottom:min(62vw,300px)}
+    .hero-sub{max-width:100%;margin:22px 0 0}
+    .hero-cta{align-self:stretch;display:block;text-align:center}
+    .steps-wrap{flex-direction:column}
+    .step,.step + .step{max-width:100%;margin-top:0}
+    .stander{margin-right:auto;margin-left:0}
+    .cue{display:none}
+    .toy-bone,.toy-ball{display:none}
+    .sitter{margin-left:0}
   }
-  /* Short AND narrow phones: compact mode trims the hero's bottom padding for
-     one-viewport laptops, but on a phone that lets the bottom-right dog (~114px
-     tall, anchored to the hero base) ride up into the survey card. Since card
-     and dog are both measured from the hero's bottom, reserving padding >= the
-     dog's height clears them at every phone height. Desktop-compact keeps its
-     smaller padding (the dog sits off to the side there, no collision). */
-  @media (max-width:720px) and (max-height:800px){
-    .hero{padding-bottom:130px}
+  @media (max-height:820px){
+    h1.poster{font-size:clamp(2.4rem,8.6vw,7rem)}
+    .s-hero{padding-top:80px}
+    .hero-sub p{margin-bottom:12px}
+  }
+  /* short desktop windows: keep the ear tips below the headline */
+  @media (max-height:820px) and (min-width:721px){
+    .bigdog-wrap{width:clamp(300px,36vw,560px);bottom:calc(-10vh - var(--dome))}
   }
   @media (prefers-reduced-motion:reduce){
     *{animation:none!important;transition:none!important}
     .lane{display:none}
+    html.pl .loader{display:none}
   }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="wordmark">pouncity<span class="dot" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span></div>
-  <div class="coming">Coming soon</div>
+<div class="loader" aria-hidden="true">
+  <div class="loader-count">Loading&nbsp;<span id="pl-n">0</span>%</div>
+  <div class="loader-line">You've found Pouncity. Sit. Stay. Scroll.</div>
+</div>
+
+<div class="cur" aria-hidden="true" id="cur"></div>
+
+<header id="header" data-on="light">
+  <a class="wordmark" href="#top" data-scrollto>pouncity<span class="dot" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span></a>
+  <a class="join-pill" href="#join" data-scrollto>Join the waitlist</a>
 </header>
 
-<main>
-  <section class="hero">
-    <div class="hero-inner">
-      <p class="eyebrow">A new thing for cats, dogs &amp; their humans</p>
-      <h1>Good things come to those who wag.</h1>
-      <p class="sub">We're building something your pet is going to love. It's almost house-trained. The waitlist starts with a short survey at the door.</p>
+<main id="top">
 
-      <div class="does">
-        <h2 class="does-label mono">Here's what Pouncity does</h2>
-        <ul class="does-list">
-          <li><span class="ico" aria-hidden="true">🍲</span><span>Feed them right, without the second-guessing.</span></li>
-          <li><span class="ico" aria-hidden="true">❤️</span><span>Daily care, all in one place.</span></li>
-          <li><span class="ico" aria-hidden="true">🗓️</span><span>Get reminders for grooming and vet visits.</span></li>
-          <li><span class="ico" aria-hidden="true">✈️</span><span>Leave town knowing your sitter has everything.</span></li>
-          <li class="more"><span class="ico" aria-hidden="true">🐾</span><span>…and many more.</span></li>
-        </ul>
+  <!-- ================= HERO ================= -->
+  <section class="s-hero" data-cursor="WAG!" data-ht="light">
+    <div class="hero-stage">
+      <h1 class="poster" id="hero-h1">Good things come to those who wag.</h1>
+
+      <span class="toy toy-yarn" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span>
+      <span class="toy toy-ball" aria-hidden="true"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="27" fill="#FFF7E6"/><circle cx="30" cy="30" r="27" fill="none" stroke="#161616" stroke-width="2.5"/><path d="M8 14 Q30 30 8 46 M52 14 Q30 30 52 46" stroke="#FF6B4A" stroke-width="3" fill="none" stroke-linecap="round"/></svg></span>
+      <span class="toy toy-bone" aria-hidden="true"><svg viewBox="0 0 96 48"><path d="M22 18 L74 18 L74 30 L22 30 Z" fill="#FFF7E6"/><circle cx="18" cy="15" r="10" fill="#FFF7E6"/><circle cx="18" cy="33" r="10" fill="#FFF7E6"/><circle cx="78" cy="15" r="10" fill="#FFF7E6"/><circle cx="78" cy="33" r="10" fill="#FFF7E6"/><path d="M22 18 L74 18 M22 30 L74 30" stroke="#161616" stroke-width="2.5" stroke-linecap="round"/><path d="M18 5 A10 10 0 0 0 8 15 A10 10 0 0 0 12 23 M18 43 A10 10 0 0 1 8 33 M78 5 A10 10 0 0 1 88 15 A10 10 0 0 1 84 23 M78 43 A10 10 0 0 0 88 33" stroke="#161616" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg></span>
+
+      <div class="bigdog-wrap" aria-hidden="true">
+        <svg class="bigdog" viewBox="0 0 360 250">
+          <g class="head-all">
+            <ellipse cx="108" cy="64" rx="38" ry="64" transform="rotate(24 108 64)" fill="#161616"/>
+            <ellipse cx="252" cy="62" rx="36" ry="60" transform="rotate(-30 252 62)" fill="#161616"/>
+            <path d="M42 310 L42 166 Q42 44 180 44 Q318 44 318 166 L318 310 Z" fill="#161616"/>
+            <g class="eye"><circle class="ew" cx="134" cy="150" r="44" fill="#fff"/><circle class="pp big" cx="134" cy="150" r="18" fill="#161616"/></g>
+            <g class="eye"><circle class="ew" cx="226" cy="150" r="44" fill="#fff"/><circle class="pp big" cx="226" cy="150" r="18" fill="#161616"/></g>
+          </g>
+        </svg>
+        <div class="hero-tail" aria-hidden="true"><svg viewBox="0 0 120 210"><path d="M6 210 C -8 130 24 62 82 40 C 96 35 106 40 104 50 C 102 58 92 62 84 68 C 58 86 48 124 50 160 C 51 180 48 198 44 210 Z" fill="#161616"/></svg></div>
       </div>
 
+      <div class="hero-sub" id="hero-sub">
+        <p>Pouncity is a new thing for cats, dogs &amp; their humans. We're building something your pet is going to love &mdash; it's almost house-trained. The waitlist starts with a short survey at the door.</p>
+        <a class="hero-cta" href="#join" data-scrollto>Join the waitlist</a>
+        <div class="cue" id="cue" aria-hidden="true">scroll<svg viewBox="0 0 16 20"><path d="M8 2 L8 15 M3 11 L8 17 L13 11" stroke="#161616" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= WHAT POUNCITY DOES ================= -->
+  <section class="s-does dome" id="does" data-cursor="SNIFF" data-ht="light">
+    <div class="does-ghost" aria-hidden="true" id="does-ghost">Sniff around.</div>
+    <div class="does-inner">
+      <div class="leash" aria-hidden="true">
+        <svg viewBox="0 0 1000 1500" preserveAspectRatio="none">
+          <path id="leash-path" d="M500 60 C 780 140 880 260 700 330 C 470 420 180 430 240 560 C 300 690 760 640 800 780 C 840 920 300 900 250 1030 C 205 1150 620 1130 780 1250 C 910 1345 930 1445 855 1485"
+                stroke="#FF6B4A" stroke-width="11" fill="none" stroke-linecap="round" opacity=".85"/>
+        </svg>
+      </div>
+
+      <div class="clowder" aria-hidden="true">
+        <svg viewBox="0 0 380 310">
+          <ellipse cx="195" cy="300" rx="152" ry="10" fill="rgba(22,22,22,.13)"/>
+          <g>
+            <path class="tail" d="M330 282 Q374 288 366 226" stroke="#161616" stroke-width="13" stroke-linecap="round" fill="none"/>
+            <path d="M272 92 L266 52 L300 74 Z" fill="#161616"/>
+            <path d="M328 94 L336 52 L304 74 Z" fill="#161616"/>
+            <circle cx="300" cy="118" r="38" fill="#161616"/>
+            <path d="M300 296 C 262 296 254 236 262 186 C 268 150 282 138 300 138 C 318 138 332 150 338 186 C 346 236 338 296 300 296 Z" fill="#161616"/>
+            <g class="eye"><circle class="ew" cx="286" cy="110" r="10.5" fill="#fff"/><circle class="pp" cx="286" cy="110" r="4.5" fill="#161616"/></g>
+            <g class="eye"><circle class="ew" cx="316" cy="110" r="10.5" fill="#fff"/><circle class="pp" cx="316" cy="110" r="4.5" fill="#161616"/></g>
+            <ellipse cx="301" cy="134" rx="14" ry="10" fill="#FFF7E6"/>
+            <path d="M296 130 L306 130 L301 137 Z" fill="#FF6B4A"/>
+            <path d="M296 141 Q301 145 306 141" stroke="#161616" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </g>
+          <g>
+            <path d="M162 118 L157 78 L190 100 Z" fill="#161616"/>
+            <path d="M228 120 L235 78 L202 100 Z" fill="#161616"/>
+            <circle cx="195" cy="146" r="40" fill="#161616"/>
+            <path d="M195 298 C 155 298 146 240 155 192 C 162 156 177 144 195 144 C 213 144 228 156 235 192 C 244 240 235 298 195 298 Z" fill="#161616"/>
+            <g class="eye"><circle class="ew" cx="181" cy="138" r="11" fill="#fff"/><circle class="pp" cx="181" cy="138" r="4.8" fill="#161616"/></g>
+            <g class="eye"><circle class="ew" cx="211" cy="138" r="11" fill="#fff"/><circle class="pp" cx="211" cy="138" r="4.8" fill="#161616"/></g>
+            <ellipse cx="196" cy="164" rx="15" ry="11" fill="#FFF7E6"/>
+            <path d="M190 159 L202 159 L196 167 Z" fill="#FF6B4A"/>
+            <path d="M190 171 Q196 176 202 171" stroke="#161616" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </g>
+          <g>
+            <path class="tail tailA" d="M40 286 Q4 278 14 222" stroke="#161616" stroke-width="14" stroke-linecap="round" fill="none"/>
+            <path d="M52 142 L44 96 L84 122 Z" fill="#161616"/>
+            <path d="M138 144 L148 98 L112 122 Z" fill="#161616"/>
+            <circle cx="95" cy="172" r="46" fill="#161616"/>
+            <path d="M95 302 C 50 302 40 244 50 196 C 58 162 75 148 95 148 C 115 148 132 162 140 196 C 150 244 140 302 95 302 Z" fill="#161616"/>
+            <g class="eye"><circle class="ew" cx="79" cy="163" r="12" fill="#fff"/><circle class="pp" cx="79" cy="163" r="5.2" fill="#161616"/></g>
+            <g class="eye"><circle class="ew" cx="113" cy="163" r="12" fill="#fff"/><circle class="pp" cx="113" cy="163" r="5.2" fill="#161616"/></g>
+            <ellipse cx="96" cy="192" rx="17" ry="12" fill="#FFF7E6"/>
+            <path d="M90 187 L102 187 L96 195 Z" fill="#FF6B4A"/>
+            <path d="M89 199 Q96 204 103 199" stroke="#161616" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+          </g>
+          <g class="bub">
+            <path d="M146 62 L144 82 L160 64 Z" fill="#FFF7E6" stroke="#161616" stroke-width="3" stroke-linejoin="round"/>
+            <rect x="122" y="12" width="72" height="54" rx="26" fill="#FFF7E6" stroke="#161616" stroke-width="3"/>
+            <circle cx="151" cy="34" r="8" fill="#FF6B4A"/>
+            <circle cx="165" cy="34" r="8" fill="#FF6B4A"/>
+            <path d="M143 37 L173 37 L158 54 Z" fill="#FF6B4A"/>
+          </g>
+          <g class="bub bub2">
+            <path d="M336 70 L326 58 L342 56 Z" fill="#FFF7E6" stroke="#161616" stroke-width="3" stroke-linejoin="round"/>
+            <circle cx="332" cy="34" r="26" fill="#FFF7E6" stroke="#161616" stroke-width="3"/>
+            <rect x="328" y="18" width="8" height="19" rx="4" fill="#161616"/>
+            <circle cx="332" cy="46" r="4.5" fill="#161616"/>
+          </g>
+          <text class="qmark" x="12" y="152" font-family="Fredoka, sans-serif" font-size="54" font-weight="700" fill="#161616">?</text>
+        </svg>
+      </div>
+
+      <h2 id="does-h2">Here's what Pouncity does.</h2>
+
+      <ul class="does-list">
+        <li class="row">
+          <span class="prop" aria-hidden="true"><svg viewBox="0 0 96 74"><ellipse cx="48" cy="68" rx="38" ry="5" fill="rgba(22,22,22,.12)"/><path d="M14 34 L82 34 Q82 66 48 66 Q14 66 14 34 Z" fill="#161616"/><path d="M14 34 L82 34 L82 41 L14 41 Z" fill="#FFF7E6" opacity=".9"/><circle cx="38" cy="24" r="6" fill="#FF6B4A"/><circle cx="54" cy="18" r="6" fill="#FF6B4A"/><circle cx="62" cy="28" r="6" fill="#FF6B4A"/></svg></span>
+          <p>Feed them right, without the second&#8209;guessing.</p>
+        </li>
+        <li class="row">
+          <span class="prop" aria-hidden="true"><svg viewBox="0 0 88 80"><path d="M44 74 C 20 58 4 42 4 26 C 4 12 14 4 26 4 C 35 4 41 9 44 15 C 47 9 53 4 62 4 C 74 4 84 12 84 26 C 84 42 68 58 44 74 Z" fill="#161616"/><circle cx="36" cy="26" r="4.5" fill="#FFF7E6"/><circle cx="52" cy="26" r="4.5" fill="#FFF7E6"/><circle cx="30" cy="35" r="4" fill="#FFF7E6"/><circle cx="58" cy="35" r="4" fill="#FFF7E6"/><path d="M44 34 Q52 40 48 48 Q44 53 40 48 Q36 40 44 34 Z" fill="#FFF7E6"/></svg></span>
+          <p>Daily care, all in one place.</p>
+        </li>
+        <li class="row">
+          <span class="prop" aria-hidden="true"><svg viewBox="0 0 84 84"><rect x="6" y="12" width="72" height="66" rx="12" fill="#161616"/><rect x="14" y="34" width="56" height="36" rx="6" fill="#FFF7E6"/><rect x="20" y="4" width="8" height="16" rx="4" fill="#161616"/><rect x="56" y="4" width="8" height="16" rx="4" fill="#161616"/><circle cx="52" cy="52" r="8" fill="#FF6B4A"/><path d="M22 46 L38 46 M22 58 L34 58" stroke="#161616" stroke-width="3.5" stroke-linecap="round"/></svg></span>
+          <p>Get reminders for grooming and vet visits.</p>
+        </li>
+        <li class="row">
+          <span class="prop" aria-hidden="true"><svg viewBox="0 0 96 76"><ellipse cx="48" cy="71" rx="40" ry="5" fill="rgba(22,22,22,.12)"/><rect x="8" y="20" width="80" height="48" rx="10" fill="#161616"/><path d="M8 38 L88 38 L88 46 L8 46 Z" fill="#FFF7E6" opacity=".9"/><path d="M36 20 L36 10 Q36 6 40 6 L56 6 Q60 6 60 10 L60 20" stroke="#161616" stroke-width="5" fill="none"/><rect x="66" y="46" width="16" height="20" rx="5" fill="#FF6B4A"/><circle cx="74" cy="54" r="2.6" fill="#161616"/><circle cx="70" cy="59" r="1.8" fill="#161616"/><circle cx="78" cy="59" r="1.8" fill="#161616"/></svg></span>
+          <p>Leave town knowing your sitter has everything.</p>
+        </li>
+      </ul>
+
+      <p class="more-line"><span>&hellip;and many more.</span><span class="paws" aria-hidden="true"><svg viewBox="0 0 24 22"><circle cx="5" cy="7" r="2.6" fill="#BF3A22"/><circle cx="12" cy="5" r="2.6" fill="#BF3A22"/><circle cx="19" cy="7" r="2.6" fill="#BF3A22"/><ellipse cx="12" cy="15" rx="6" ry="4.6" fill="#BF3A22"/></svg><svg viewBox="0 0 24 22"><circle cx="5" cy="7" r="2.6" fill="#BF3A22"/><circle cx="12" cy="5" r="2.6" fill="#BF3A22"/><circle cx="19" cy="7" r="2.6" fill="#BF3A22"/><ellipse cx="12" cy="15" rx="6" ry="4.6" fill="#BF3A22"/></svg><svg viewBox="0 0 24 22"><circle cx="5" cy="7" r="2.6" fill="#BF3A22"/><circle cx="12" cy="5" r="2.6" fill="#BF3A22"/><circle cx="19" cy="7" r="2.6" fill="#BF3A22"/><ellipse cx="12" cy="15" rx="6" ry="4.6" fill="#BF3A22"/></svg></span></p>
+
+      <div class="stander" id="stander" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <!-- ================= HOW JOINING WORKS ================= -->
+  <section class="s-how dome" id="how" data-cursor="SIT." data-ht="coral">
+    <div class="how-ghost" aria-hidden="true" id="how-ghost">Almost house&#8209;trained.</div>
+    <div class="how-inner">
+      <h2 id="how-h2">How joining works</h2>
+      <div class="steps-wrap">
+        <div class="step">
+          <div class="step-num" aria-hidden="true">01.</div>
+          <h3>Take the survey</h3>
+          <p>A few quick questions about you &amp; your pet &mdash; about 5 minutes. The survey is the sign&#8209;up. No email form after.</p>
+        </div>
+        <div class="step">
+          <div class="step-num" aria-hidden="true">02.</div>
+          <h3>You're on the list</h3>
+          <p>That's it. We'll send you one message when we launch &mdash; no spam, just that.</p>
+        </div>
+      </div>
+      <div class="sitter" aria-hidden="true">
+        <svg viewBox="0 0 210 200">
+          <ellipse cx="100" cy="192" rx="78" ry="8" fill="rgba(22,22,22,.16)"/>
+          <path class="sittail" d="M46 184 C 28 186 12 180 4 166 C -1 156 6 146 17 150 C 26 154 28 166 40 172 C 46 175 54 177 58 178 Z" fill="#161616"/>
+          <path d="M44 180 C 24 172 16 148 24 126 C 30 108 44 98 60 96 C 76 94 88 98 96 86 C 104 66 112 54 124 48 C 136 44 146 48 150 58 C 154 70 152 88 150 104 C 149 124 148 140 136 156 C 108 162 72 174 44 180 Z" fill="#161616"/>
+          <path d="M104 120 L118 121 L117 180 Q125 181 125 187 Q125 192 118 192 L107 192 Q102 192 103 185 Z" fill="#161616"/>
+          <path d="M130 120 L144 121 L143 180 Q151 181 151 187 Q151 192 144 192 L133 192 Q128 192 129 185 Z" fill="#161616"/>
+          <path d="M112 84 C 102 66 104 40 122 26 C 136 15 158 12 172 20 C 188 16 202 26 205 38 C 208 50 200 58 188 58 C 182 70 170 78 154 80 C 138 84 120 88 112 84 Z" fill="#161616"/>
+          <path class="ear" d="M136 34 C 132 12 146 0 162 4 C 178 9 180 30 164 40 C 154 46 142 44 136 34 Z" fill="#161616"/>
+          <g class="eye"><circle class="ew" cx="128" cy="46" r="12" fill="#fff"/><circle class="pp" cx="128" cy="46" r="5" fill="#161616"/></g>
+          <g class="eye"><circle class="ew" cx="155" cy="50" r="12" fill="#fff"/><circle class="pp" cx="155" cy="50" r="5" fill="#161616"/></g>
+        </svg>
+      </div>
+    </div>
+    <div class="lane" aria-hidden="true"><div class="runner" id="runner"></div></div>
+  </section>
+
+  <!-- ================= JOIN ================= -->
+  <section class="s-join dome" id="join" data-cursor="JOIN" data-ht="dark">
+    <div class="join-ghost" aria-hidden="true" id="join-ghost">Good human.</div>
+    <div class="join-inner">
+      <h2 id="join-h2">Be first through the door.</h2>
       <div class="signup">
-        <svg class="peek" viewBox="0 0 170 82" aria-hidden="true">
-          <path d="M40 48 L33 6 L74 36 Z" fill="#161616"/>
-          <path d="M130 48 L137 6 L96 36 Z" fill="#161616"/>
-          <path d="M13 82 Q13 30 85 30 Q157 30 157 82 Z" fill="#161616"/>
-          <g class="eye"><circle class="ew" cx="60" cy="50" r="13" fill="#fff"/><circle class="pp" cx="60" cy="50" r="5.5" fill="#161616"/></g>
-          <g class="eye"><circle class="ew" cx="110" cy="50" r="13" fill="#fff"/><circle class="pp" cx="110" cy="50" r="5.5" fill="#161616"/></g>
-          <path d="M79 61 L91 61 L85 69 Z" fill="#FF6B4A"/>
+        <svg class="peek" viewBox="0 0 170 100" aria-hidden="true">
+          <ellipse cx="52" cy="42" rx="15" ry="26" transform="rotate(30 52 42)" fill="#FFF7E6"/>
+          <ellipse cx="118" cy="41" rx="14" ry="25" transform="rotate(-34 118 41)" fill="#FFF7E6"/>
+          <path d="M28 100 C 28 52 52 42 85 42 C 118 42 142 52 142 100 Z" fill="#FFF7E6"/>
+          <g class="eye"><circle class="ew" cx="62" cy="70" r="13" fill="#fff" stroke="#161616" stroke-width="2"/><circle class="pp" cx="62" cy="70" r="5.5" fill="#161616"/></g>
+          <g class="eye"><circle class="ew" cx="108" cy="70" r="13" fill="#fff" stroke="#161616" stroke-width="2"/><circle class="pp" cx="108" cy="70" r="5.5" fill="#161616"/></g>
+          <path d="M79 82 L91 82 L85 91 Z" fill="#FF6B4A"/>
         </svg>
         <div class="survey-card">
-          <ol class="steps mono">
-            <li><span class="n">01</span><span>A few quick questions about you &amp; your pet (about 5 min)</span></li>
-            <li><span class="n">02</span><span>You're on the list. We'll message you at launch.</span></li>
-          </ol>
           <a class="cta" id="survey-cta" href="https://form.jotform.com/262526068123050" target="_blank" rel="noopener" aria-describedby="ok">Take the survey &amp; join the waitlist</a>
           <p class="ok" id="ok"><span class="ball" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span><span id="ok-text">The survey opens in a new tab.</span></p>
           <p class="fineprint">The survey is the sign-up. No spam, just one message when we launch.</p>
         </div>
       </div>
-    </div>
-
-    <div class="clowder" aria-hidden="true">
-      <svg viewBox="0 0 380 310">
-        <ellipse cx="195" cy="300" rx="152" ry="10" fill="rgba(22,22,22,.13)"/>
-        <!-- right cat, tall -->
-        <g>
-          <path class="tail" d="M330 282 Q374 288 366 226" stroke="#161616" stroke-width="13" stroke-linecap="round" fill="none"/>
-          <path d="M272 92 L266 52 L300 74 Z" fill="#161616"/>
-          <path d="M328 94 L336 52 L304 74 Z" fill="#161616"/>
-          <circle cx="300" cy="118" r="38" fill="#161616"/>
-          <path d="M300 296 C 262 296 254 236 262 186 C 268 150 282 138 300 138 C 318 138 332 150 338 186 C 346 236 338 296 300 296 Z" fill="#161616"/>
-          <g class="eye"><circle class="ew" cx="286" cy="110" r="10.5" fill="#fff"/><circle class="pp" cx="286" cy="110" r="4.5" fill="#161616"/></g>
-          <g class="eye"><circle class="ew" cx="316" cy="110" r="10.5" fill="#fff"/><circle class="pp" cx="316" cy="110" r="4.5" fill="#161616"/></g>
-          <ellipse cx="301" cy="134" rx="14" ry="10" fill="#FFF7E6"/>
-          <path d="M296 130 L306 130 L301 137 Z" fill="#FF6B4A"/>
-          <path d="M296 141 Q301 145 306 141" stroke="#161616" stroke-width="2" fill="none" stroke-linecap="round"/>
-        </g>
-        <!-- middle cat -->
-        <g>
-          <path d="M162 118 L157 78 L190 100 Z" fill="#161616"/>
-          <path d="M228 120 L235 78 L202 100 Z" fill="#161616"/>
-          <circle cx="195" cy="146" r="40" fill="#161616"/>
-          <path d="M195 298 C 155 298 146 240 155 192 C 162 156 177 144 195 144 C 213 144 228 156 235 192 C 244 240 235 298 195 298 Z" fill="#161616"/>
-          <g class="eye"><circle class="ew" cx="181" cy="138" r="11" fill="#fff"/><circle class="pp" cx="181" cy="138" r="4.8" fill="#161616"/></g>
-          <g class="eye"><circle class="ew" cx="211" cy="138" r="11" fill="#fff"/><circle class="pp" cx="211" cy="138" r="4.8" fill="#161616"/></g>
-          <ellipse cx="196" cy="164" rx="15" ry="11" fill="#FFF7E6"/>
-          <path d="M190 159 L202 159 L196 167 Z" fill="#FF6B4A"/>
-          <path d="M190 171 Q196 176 202 171" stroke="#161616" stroke-width="2" fill="none" stroke-linecap="round"/>
-        </g>
-        <!-- front-left cat, big -->
-        <g>
-          <path class="tail tailA" d="M40 286 Q4 278 14 222" stroke="#161616" stroke-width="14" stroke-linecap="round" fill="none"/>
-          <path d="M52 142 L44 96 L84 122 Z" fill="#161616"/>
-          <path d="M138 144 L148 98 L112 122 Z" fill="#161616"/>
-          <circle cx="95" cy="172" r="46" fill="#161616"/>
-          <path d="M95 302 C 50 302 40 244 50 196 C 58 162 75 148 95 148 C 115 148 132 162 140 196 C 150 244 140 302 95 302 Z" fill="#161616"/>
-          <g class="eye"><circle class="ew" cx="79" cy="163" r="12" fill="#fff"/><circle class="pp" cx="79" cy="163" r="5.2" fill="#161616"/></g>
-          <g class="eye"><circle class="ew" cx="113" cy="163" r="12" fill="#fff"/><circle class="pp" cx="113" cy="163" r="5.2" fill="#161616"/></g>
-          <ellipse cx="96" cy="192" rx="17" ry="12" fill="#FFF7E6"/>
-          <path d="M90 187 L102 187 L96 195 Z" fill="#FF6B4A"/>
-          <path d="M89 199 Q96 204 103 199" stroke="#161616" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-        </g>
-        <!-- doodles -->
-        <g class="bub">
-          <path d="M146 62 L144 82 L160 64 Z" fill="#FFF7E6" stroke="#161616" stroke-width="3" stroke-linejoin="round"/>
-          <rect x="122" y="12" width="72" height="54" rx="26" fill="#FFF7E6" stroke="#161616" stroke-width="3"/>
-          <circle cx="151" cy="34" r="8" fill="#FF6B4A"/>
-          <circle cx="165" cy="34" r="8" fill="#FF6B4A"/>
-          <path d="M143 37 L173 37 L158 54 Z" fill="#FF6B4A"/>
-        </g>
-        <g class="bub bub2">
-          <path d="M336 70 L326 58 L342 56 Z" fill="#FFF7E6" stroke="#161616" stroke-width="3" stroke-linejoin="round"/>
-          <circle cx="332" cy="34" r="26" fill="#FFF7E6" stroke="#161616" stroke-width="3"/>
-          <rect x="328" y="18" width="8" height="19" rx="4" fill="#161616"/>
-          <circle cx="332" cy="46" r="4.5" fill="#161616"/>
-        </g>
-        <text class="qmark" x="12" y="152" font-family="Fredoka, sans-serif" font-size="54" font-weight="700" fill="#161616">?</text>
-        <g class="tick"><path d="M228 66 L240 46" stroke="#161616" stroke-width="6" stroke-linecap="round"/></g>
-        <g class="tick tick2"><path d="M252 58 L258 36" stroke="#161616" stroke-width="6" stroke-linecap="round"/></g>
-      </svg>
-    </div>
-
-    <div class="stander" id="stander"></div>
-    <div class="lane"><div class="runner" id="runner"></div></div>
-
-    <div class="bigdog-wrap">
-      <svg class="bigdog" viewBox="0 0 360 242" aria-hidden="true">
-        <g class="head-all">
-          <ellipse class="bear" cx="38" cy="98" rx="26" ry="54" transform="rotate(14 38 98)" fill="#161616"/>
-          <ellipse class="bear" cx="322" cy="98" rx="26" ry="54" transform="rotate(-14 322 98)" fill="#161616"/>
-          <path d="M42 300 L42 158 Q42 36 180 36 Q318 36 318 158 L318 300 Z" fill="#161616"/>
-          <g class="eye"><circle class="ew" cx="128" cy="146" r="44" fill="#fff"/><circle class="pp big" cx="128" cy="146" r="18" fill="#161616"/></g>
-          <g class="eye"><circle class="ew" cx="232" cy="146" r="44" fill="#fff"/><circle class="pp big" cx="232" cy="146" r="18" fill="#161616"/></g>
-        </g>
-      </svg>
+      <footer>
+        <span class="wordmark">pouncity<span class="dot" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span></span>
+        <small>&copy; 2026 POUNCITY &middot; 100% VECTOR FUR</small>
+      </footer>
     </div>
   </section>
+
 </main>
 
-<footer>
-  <div class="wordmark">pouncity<span class="dot" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span></div>
-  <small>&copy; 2026 POUNCITY &middot; 100% VECTOR FUR</small>
-</footer>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/ScrollTrigger.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/SplitText.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.3.11/dist/lenis.min.js"></script>
 <script>
-  /* character template: side-view dog, straight from the pin reference */
-  function dogSVG(cls){
-    return `
-    <svg class="dog ${cls}" viewBox="0 0 260 172" aria-hidden="true">
-      <ellipse cx="126" cy="162" rx="84" ry="8" fill="rgba(22,22,22,.13)"/>
-      <g class="dog-all">
-        <path class="tail" d="M46 84 Q16 68 22 38" stroke="#161616" stroke-width="14" stroke-linecap="round" fill="none"/>
-        <g class="leg l1"><rect x="64" y="100" width="14" height="48" rx="7" fill="#161616"/></g>
-        <g class="leg l2"><rect x="90" y="103" width="14" height="45" rx="7" fill="#161616"/></g>
-        <g class="leg l3"><rect x="126" y="103" width="14" height="45" rx="7" fill="#161616"/></g>
-        <g class="leg l4"><rect x="152" y="100" width="14" height="48" rx="7" fill="#161616"/></g>
-        <ellipse cx="112" cy="88" rx="66" ry="36" fill="#161616"/>
-        <circle cx="188" cy="58" r="36" fill="#161616"/>
-        <path d="M206 46 Q250 42 254 58 Q256 72 216 76 Z" fill="#161616"/>
-        <circle cx="248" cy="49" r="8" fill="#161616"/>
-        <path class="ear" d="M192 24 Q216 8 228 26 Q222 46 198 46 Z" fill="#161616"/>
-        <g class="eye"><circle class="ew" cx="176" cy="50" r="13" fill="#fff"/><circle class="pp" cx="176" cy="50" r="5.5" fill="#161616"/></g>
-        <g class="eye"><circle class="ew" cx="203" cy="54" r="13" fill="#fff"/><circle class="pp" cx="203" cy="54" r="5.5" fill="#161616"/></g>
-      </g>
-    </svg>`;
+(function(){
+'use strict';
+
+/* ---------- shared character templates (side-view dog + walking cat) ---------- */
+function dogSVG(cls){
+  return '<svg class="dog '+cls+'" viewBox="0 0 260 172" aria-hidden="true">'
+  +'<ellipse cx="126" cy="162" rx="84" ry="8" fill="rgba(22,22,22,.13)"/>'
+  +'<g class="dog-all">'
+  +'<path class="tail" d="M60 96 C 34 88 16 68 12 42 C 10 28 20 22 30 28 C 38 34 36 48 42 60 C 48 72 58 80 68 84 Z" fill="#161616"/>'
+  +'<g class="leg l1"><path d="M66 98 L80 100 L79 138 Q86 139 86 145 Q86 150 79 150 L68 150 Q63 150 64 144 Z" fill="#161616"/></g>'
+  +'<g class="leg l2"><path d="M92 102 L105 103 L104 138 Q111 139 111 145 Q111 150 104 150 L94 150 Q89 150 90 144 Z" fill="#161616"/></g>'
+  +'<g class="leg l3"><path d="M128 102 L141 103 L140 138 Q147 139 147 145 Q147 150 140 150 L130 150 Q125 150 126 144 Z" fill="#161616"/></g>'
+  +'<g class="leg l4"><path d="M154 98 L168 100 L167 138 Q174 139 174 145 Q174 150 167 150 L156 150 Q151 150 152 144 Z" fill="#161616"/></g>'
+  +'<path d="M52 110 C 36 104 30 84 40 68 C 50 54 74 46 102 46 C 132 46 160 52 176 64 C 188 74 190 92 178 102 C 164 112 136 114 108 114 C 84 114 62 114 52 110 Z" fill="#161616"/>'
+  +'<path d="M162 84 C 152 66 154 40 172 26 C 186 15 208 12 222 20 C 238 16 252 26 255 38 C 258 50 250 58 238 58 C 232 70 220 78 204 80 C 188 84 170 88 162 84 Z" fill="#161616"/>'
+  +'<path class="ear" d="M186 34 C 182 12 196 0 212 4 C 228 9 230 30 214 40 C 204 46 192 44 186 34 Z" fill="#161616"/>'
+  +'<g class="eye"><circle class="ew" cx="178" cy="46" r="13" fill="#fff"/><circle class="pp" cx="178" cy="46" r="5.5" fill="#161616"/></g>'
+  +'<g class="eye"><circle class="ew" cx="205" cy="50" r="13" fill="#fff"/><circle class="pp" cx="205" cy="50" r="5.5" fill="#161616"/></g>'
+  +'</g></svg>';
+}
+function catWalkSVG(){
+  return '<svg class="dog run catwalk" viewBox="0 0 220 172" aria-hidden="true">'
+  +'<ellipse cx="112" cy="162" rx="66" ry="8" fill="rgba(22,22,22,.13)"/>'
+  +'<g class="dog-all">'
+  +'<path class="tail" d="M32 92 Q8 66 20 34" stroke="#161616" stroke-width="12" stroke-linecap="round" fill="none"/>'
+  +'<g class="leg l1"><rect x="62" y="104" width="12" height="44" rx="6" fill="#161616"/></g>'
+  +'<g class="leg l2"><rect x="84" y="106" width="12" height="42" rx="6" fill="#161616"/></g>'
+  +'<g class="leg l3"><rect x="116" y="106" width="12" height="42" rx="6" fill="#161616"/></g>'
+  +'<g class="leg l4"><rect x="138" y="104" width="12" height="44" rx="6" fill="#161616"/></g>'
+  +'<ellipse cx="104" cy="92" rx="58" ry="30" fill="#161616"/>'
+  +'<circle cx="168" cy="62" r="30" fill="#161616"/>'
+  +'<path d="M150 42 L144 6 L176 30 Z" fill="#161616"/>'
+  +'<path d="M186 44 L196 8 L166 26 Z" fill="#161616"/>'
+  +'<g class="eye"><circle class="ew" cx="160" cy="56" r="11.5" fill="#fff"/><circle class="pp" cx="160" cy="56" r="5" fill="#161616"/></g>'
+  +'<g class="eye"><circle class="ew" cx="184" cy="60" r="11.5" fill="#fff"/><circle class="pp" cx="184" cy="60" r="5" fill="#161616"/></g>'
+  +'<path d="M191 66 L199 70 L191 74 Z" fill="#FF6B4A"/>'
+  +'</g></svg>';
+}
+var standerEl = document.getElementById('stander');
+var runnerEl = document.getElementById('runner');
+if (standerEl) standerEl.innerHTML = dogSVG('idle');
+if (runnerEl) runnerEl.innerHTML = dogSVG('run') + catWalkSVG();
+
+var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+var fine = matchMedia('(pointer:fine)').matches;
+
+/* ---------- preloader (vanilla, independent of GSAP) ---------- */
+var loaderDone;
+(function(){
+  var html = document.documentElement;
+  var resolve;
+  loaderDone = new Promise(function(r){ resolve = r; });
+  try { localStorage.setItem('pouncity_seen','1'); } catch(e){}
+  if (!html.classList.contains('pl')) { resolve(); return; }
+  var n = document.getElementById('pl-n');
+  var t0 = performance.now(), DUR = 1150, finished = false;
+  function finish(){
+    if (finished) return;
+    finished = true;
+    if (n) n.textContent = '100';
+    html.classList.add('pl-out');
+    setTimeout(function(){ html.classList.add('pl-gone'); resolve(); }, 680);
   }
-
-  /* walking cat, same silhouette language as the dog */
-  function catWalkSVG(){
-    return `
-    <svg class="dog run catwalk" viewBox="0 0 220 172" aria-hidden="true">
-      <ellipse cx="112" cy="162" rx="66" ry="8" fill="rgba(22,22,22,.13)"/>
-      <g class="dog-all">
-        <path class="tail" d="M32 92 Q8 66 20 34" stroke="#161616" stroke-width="12" stroke-linecap="round" fill="none"/>
-        <g class="leg l1"><rect x="62" y="104" width="12" height="44" rx="6" fill="#161616"/></g>
-        <g class="leg l2"><rect x="84" y="106" width="12" height="42" rx="6" fill="#161616"/></g>
-        <g class="leg l3"><rect x="116" y="106" width="12" height="42" rx="6" fill="#161616"/></g>
-        <g class="leg l4"><rect x="138" y="104" width="12" height="44" rx="6" fill="#161616"/></g>
-        <ellipse cx="104" cy="92" rx="58" ry="30" fill="#161616"/>
-        <circle cx="168" cy="62" r="30" fill="#161616"/>
-        <path d="M150 42 L144 6 L176 30 Z" fill="#161616"/>
-        <path d="M186 44 L196 8 L166 26 Z" fill="#161616"/>
-        <g class="eye"><circle class="ew" cx="160" cy="56" r="11.5" fill="#fff"/><circle class="pp" cx="160" cy="56" r="5" fill="#161616"/></g>
-        <g class="eye"><circle class="ew" cx="184" cy="60" r="11.5" fill="#fff"/><circle class="pp" cx="184" cy="60" r="5" fill="#161616"/></g>
-        <path d="M191 66 L199 70 L191 74 Z" fill="#FF6B4A"/>
-      </g>
-    </svg>`;
+  function tick(now){
+    if (finished) return;
+    var p = Math.min(1, (now - t0) / DUR);
+    var e = 1 - Math.pow(1 - p, 3);
+    if (n) n.textContent = String(Math.round(e * 100));
+    if (p >= 1) { finish(); return; }
+    requestAnimationFrame(tick);
   }
+  requestAnimationFrame(tick);
+  setTimeout(finish, 2600); /* fail-safe: never trap the visitor */
+})();
 
-  /* hero characters: a dog standing on the ground line, plus a dog and
-     cat that stroll past together */
-  document.getElementById('stander').innerHTML = dogSVG('idle');
-  document.getElementById('runner').innerHTML = dogSVG('run') + catWalkSVG();
+/* ---------- survey handoff acknowledgment (vanilla) ---------- */
+(function(){
+  var cta = document.getElementById('survey-cta');
+  var okText = document.getElementById('ok-text');
+  var KEY = 'pouncity_started';
+  if (!cta) return;
+  function markStarted(celebrate){
+    if (celebrate) document.body.classList.add('celebrate');
+    if (okText) okText.textContent = 'Opened in a new tab. Finish it to lock your spot.';
+  }
+  var started = false;
+  try { started = localStorage.getItem(KEY) === '1'; } catch (e) {}
+  if (started) markStarted(false);
+  cta.addEventListener('click', function(){
+    try { localStorage.setItem(KEY, '1'); } catch (e) {}
+    markStarted(true);
+  });
+})();
 
-  /* googly eyes follow the cursor */
-  const finePointer = matchMedia('(pointer:fine)').matches
-    && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (finePointer){
-    const eyes = [...document.querySelectorAll('.eye')].map(g => ({
-      ew: g.querySelector('.ew'),
-      pp: g.querySelector('.pp'),
-      max: g.querySelector('.pp').classList.contains('big') ? 11 : 3.6,
-    }));
-    let mx = innerWidth/2, my = 0, raf = 0;
-    addEventListener('mousemove', e => {
-      mx = e.clientX; my = e.clientY;
-      if (!raf) raf = requestAnimationFrame(look);
-    });
-    function look(){
-      raf = 0;
-      for (const {ew, pp, max} of eyes){
-        const r = ew.getBoundingClientRect();
-        if (!r.width) continue;
-        const dx = mx - (r.x + r.width/2), dy = my - (r.y + r.height/2);
-        const d = Math.hypot(dx, dy) || 1;
-        pp.style.transform = `translate(${dx/d*max}px, ${dy/d*max}px)`;
-      }
+/* ---------- googly eyes follow the cursor (vanilla) ---------- */
+if (fine && !reduced) (function(){
+  var eyes = [].slice.call(document.querySelectorAll('.eye')).map(function(g){
+    var pp = g.querySelector('.pp');
+    return { ew: g.querySelector('.ew'), pp: pp, max: pp && pp.classList.contains('big') ? 11 : 3.6 };
+  }).filter(function(e){ return e.ew && e.pp; });
+  var mx = innerWidth/2, my = 0, raf = 0;
+  addEventListener('mousemove', function(e){
+    mx = e.clientX; my = e.clientY;
+    if (!raf) raf = requestAnimationFrame(look);
+  });
+  function look(){
+    raf = 0;
+    for (var i = 0; i < eyes.length; i++){
+      var o = eyes[i];
+      var r = o.ew.getBoundingClientRect();
+      if (!r.width) continue;
+      var dx = mx - (r.x + r.width/2), dy = my - (r.y + r.height/2);
+      var d = Math.hypot(dx, dy) || 1;
+      o.pp.style.transform = 'translate(' + (dx/d*o.max) + 'px,' + (dy/d*o.max) + 'px)';
     }
   }
+})();
 
-  /* The survey opens in a new tab and IS the sign-up. Give the tab the user
-     stays on a post-click / returning-visitor acknowledgment. */
-  (function(){
-    const cta = document.getElementById('survey-cta');
-    const okText = document.getElementById('ok-text');
-    const KEY = 'pouncity_started';
-    function markStarted(celebrate){
-      if (celebrate) document.body.classList.add('celebrate');
-      if (okText) okText.textContent = 'Opened in a new tab. Finish it to lock your spot.';
+/* ---------- motion layer: GSAP + ScrollTrigger + SplitText + Lenis ---------- */
+if (reduced || !window.gsap || !window.ScrollTrigger || !window.SplitText) return;
+var html = document.documentElement;
+html.classList.add('motion');
+gsap.registerPlugin(ScrollTrigger, SplitText);
+
+/* smooth scroll on fine pointers; native on touch */
+var lenis = null;
+if (fine && window.Lenis){
+  lenis = new Lenis({ autoRaf: false, duration: 1.15 });
+  gsap.ticker.add(function(t){ lenis.raf(t * 1000); });
+  gsap.ticker.lagSmoothing(0);
+  lenis.on('scroll', ScrollTrigger.update);
+}
+
+/* anchor scrolling */
+[].slice.call(document.querySelectorAll('[data-scrollto]')).forEach(function(a){
+  a.addEventListener('click', function(e){
+    var id = a.getAttribute('href');
+    if (!id || id.charAt(0) !== '#') return;
+    var target = id === '#top' ? document.body : document.querySelector(id);
+    if (!target) return;
+    e.preventDefault();
+    if (lenis) lenis.scrollTo(target === document.body ? 0 : target);
+    else target.scrollIntoView({ behavior: 'smooth' });
+  });
+});
+
+/* header recolor per section */
+var header = document.getElementById('header');
+[].slice.call(document.querySelectorAll('section[data-ht]')).forEach(function(sec){
+  ScrollTrigger.create({
+    trigger: sec, start: 'top 64px', end: 'bottom 64px',
+    onToggle: function(self){ if (self.isActive) header.dataset.on = sec.dataset.ht; }
+  });
+});
+
+/* trailing character cursor, per-section word */
+if (fine) (function(){
+  var cur = document.getElementById('cur');
+  var chars = [], pos = [], mouse = { x: innerWidth/2, y: innerHeight/2 }, seen = false;
+  var overControl = false, shown = null;
+  function setWord(w){
+    cur.innerHTML = '';
+    chars = []; pos = [];
+    for (var i = 0; i < w.length; i++){
+      var s = document.createElement('span');
+      s.textContent = w.charAt(i);
+      cur.appendChild(s);
+      chars.push(s);
+      pos.push({ x: mouse.x, y: mouse.y });
     }
-    let started = false;
-    try { started = localStorage.getItem(KEY) === '1'; } catch (e) {}
-    if (started) markStarted(false);
-    cta.addEventListener('click', () => {
-      try { localStorage.setItem(KEY, '1'); } catch (e) {}
-      markStarted(true);
+    shown = null;
+  }
+  setWord('WAG!');
+  addEventListener('mousemove', function(e){ mouse.x = e.clientX; mouse.y = e.clientY; seen = true; });
+  /* the word steps aside over links and buttons so it never garbles a label */
+  document.addEventListener('mouseover', function(e){
+    overControl = !!(e.target.closest && e.target.closest('a,button'));
+  });
+  gsap.ticker.add(function(){
+    if (!chars.length) return;
+    var tx = mouse.x + 22, ty = mouse.y + 24;
+    var want = seen && !overControl;
+    for (var i = 0; i < chars.length; i++){
+      var p = pos[i];
+      var target = i === 0 ? { x: tx, y: ty } : { x: pos[i-1].x + 11, y: pos[i-1].y };
+      p.x += (target.x - p.x) * 0.32;
+      p.y += (target.y - p.y) * 0.32;
+      chars[i].style.transform = 'translate(' + p.x + 'px,' + p.y + 'px)';
+    }
+    if (want !== shown){
+      shown = want;
+      for (var j = 0; j < chars.length; j++) chars[j].style.opacity = want ? 1 : 0;
+    }
+  });
+  [].slice.call(document.querySelectorAll('section[data-cursor]')).forEach(function(sec){
+    ScrollTrigger.create({
+      trigger: sec, start: 'top 50%', end: 'bottom 50%',
+      onToggle: function(self){ if (self.isActive) setWord(sec.dataset.cursor); }
     });
-  })();
+  });
+})();
+
+/* reveals: built after fonts settle so SplitText measures real glyphs */
+function buildReveals(){
+  /* --- hero entrance, held for the preloader --- */
+  var h1 = document.getElementById('hero-h1');
+  var split = new SplitText(h1, { type: 'chars,words', charsClass: 'hero-word' });
+  var intro = gsap.timeline({ paused: true });
+  intro.from(split.chars, {
+    yPercent: 120,
+    rotation: function(){ return gsap.utils.random(-28, 28); },
+    autoAlpha: 0,
+    duration: 0.9,
+    ease: 'back.out(1.4)',
+    stagger: 0.022,
+    immediateRender: true
+  })
+  .from('.bigdog-wrap', { yPercent: 70, duration: 1.1, ease: 'power3.out', immediateRender: true }, 0.25)
+  .from('#hero-sub', { y: 34, autoAlpha: 0, duration: 0.7, ease: 'power2.out', immediateRender: true }, 0.6)
+  .from('.toy', { scale: 0, duration: 0.7, ease: 'back.out(2.2)', stagger: 0.09, immediateRender: true }, 0.5)
+  .from('#cue', { autoAlpha: 0, duration: 0.5, immediateRender: true }, 1.0)
+  .from('#header', { y: -20, autoAlpha: 0, duration: 0.5, immediateRender: true }, 0.9);
+  loaderDone.then(function(){ intro.play(); });
+
+  /* hero parallax + toy float + velocity skew */
+  gsap.to(h1, {
+    yPercent: -14, ease: 'none',
+    scrollTrigger: { trigger: '.s-hero', start: 'top top', end: 'bottom top', scrub: true }
+  });
+  gsap.utils.toArray('.toy').forEach(function(t, i){
+    gsap.to(t, { y: i % 2 ? 16 : -18, rotation: i % 2 ? 8 : -6, duration: 2.6 + i * 0.5,
+      yoyo: true, repeat: -1, ease: 'sine.inOut', delay: i * 0.3 });
+  });
+  var skewTo = gsap.quickTo('.toy', 'skewY', { duration: 0.4, ease: 'power2.out' });
+  ScrollTrigger.create({
+    onUpdate: function(self){
+      skewTo(gsap.utils.clamp(-8, 8, self.getVelocity() / -320));
+    }
+  });
+
+  /* --- what pouncity does --- */
+  var doesSplit = new SplitText('#does-h2', { type: 'words' });
+  gsap.from(doesSplit.words, {
+    y: 70, rotation: 5, autoAlpha: 0, duration: 0.8, ease: 'power3.out', stagger: 0.06,
+    scrollTrigger: { trigger: '#does-h2', start: 'top 78%' }
+  });
+  gsap.from('.clowder', {
+    y: 90, autoAlpha: 0, duration: 0.9, ease: 'power3.out',
+    scrollTrigger: { trigger: '.s-does', start: 'top 60%' }
+  });
+  gsap.utils.toArray('.row').forEach(function(row, i){
+    var even = i % 2 === 1;
+    gsap.from(row, {
+      x: even ? 110 : -110, rotation: even ? 3 : -3, autoAlpha: 0,
+      duration: 0.85, ease: 'power3.out',
+      scrollTrigger: { trigger: row, start: 'top 82%' }
+    });
+  });
+  gsap.from('.more-line', {
+    autoAlpha: 0, y: 30, duration: 0.6,
+    scrollTrigger: { trigger: '.more-line', start: 'top 88%' }
+  });
+  gsap.from('.stander', {
+    y: 70, autoAlpha: 0, duration: 0.7, ease: 'back.out(1.6)',
+    scrollTrigger: { trigger: '.stander', start: 'top 90%' }
+  });
+  var leash = document.getElementById('leash-path');
+  if (leash && innerWidth > 900){
+    var len = leash.getTotalLength();
+    gsap.set(leash, { strokeDasharray: len, strokeDashoffset: len });
+    gsap.to(leash, {
+      strokeDashoffset: 0, ease: 'none',
+      scrollTrigger: { trigger: '.s-does', start: 'top 55%', end: 'bottom 85%', scrub: 0.6 }
+    });
+  }
+
+  gsap.to('#does-ghost', {
+    xPercent: 5, ease: 'none',
+    scrollTrigger: { trigger: '.s-does', start: 'top bottom', end: 'bottom top', scrub: true }
+  });
+
+  /* --- how joining works --- */
+  gsap.to('#how-ghost', {
+    xPercent: -6, ease: 'none',
+    scrollTrigger: { trigger: '.s-how', start: 'top bottom', end: 'bottom top', scrub: true }
+  });
+  var howSplit = new SplitText('#how-h2', { type: 'words' });
+  gsap.from(howSplit.words, {
+    y: 70, rotation: -4, autoAlpha: 0, duration: 0.8, ease: 'power3.out', stagger: 0.07,
+    scrollTrigger: { trigger: '#how-h2', start: 'top 78%' }
+  });
+  gsap.utils.toArray('.step').forEach(function(step, i){
+    gsap.from(step, {
+      y: 110, rotation: i ? 6 : -6, autoAlpha: 0, duration: 0.9, ease: 'power3.out',
+      scrollTrigger: { trigger: step, start: 'top 84%' }
+    });
+  });
+  gsap.fromTo('#runner', { x: '-42vw' }, {
+    x: '108vw', ease: 'none',
+    scrollTrigger: { trigger: '.s-how', start: 'top 80%', end: 'bottom 20%', scrub: 0.8 }
+  });
+
+  /* --- join --- */
+  gsap.to('#join-ghost', {
+    xPercent: -5, ease: 'none',
+    scrollTrigger: { trigger: '.s-join', start: 'top bottom', end: 'bottom top', scrub: true }
+  });
+  var joinSplit = new SplitText('#join-h2', { type: 'chars,words', charsClass: 'join-word' });
+  gsap.from(joinSplit.chars, {
+    yPercent: 110, autoAlpha: 0, duration: 0.7, ease: 'back.out(1.5)', stagger: 0.02,
+    scrollTrigger: { trigger: '#join-h2', start: 'top 80%' }
+  });
+  gsap.from('.signup', {
+    y: 80, autoAlpha: 0, duration: 0.8, ease: 'power3.out',
+    scrollTrigger: { trigger: '.signup', start: 'top 86%' }
+  });
+  gsap.from('footer', {
+    autoAlpha: 0, y: 24, duration: 0.6,
+    scrollTrigger: { trigger: 'footer', start: 'top 96%' }
+  });
+  gsap.from('.sitter', {
+    y: 70, autoAlpha: 0, duration: 0.7, ease: 'back.out(1.6)',
+    scrollTrigger: { trigger: '.sitter', start: 'top 92%' }
+  });
+  ScrollTrigger.create({
+    trigger: '.s-join', start: 'top 75%',
+    toggleClass: { targets: '.s-join', className: 'act' }
+  });
+
+  ScrollTrigger.refresh();
+}
+
+if (document.fonts && document.fonts.ready){
+  document.fonts.ready.then(buildReveals);
+} else {
+  buildReveals();
+}
+})();
 </script>
 </body>
 </html>

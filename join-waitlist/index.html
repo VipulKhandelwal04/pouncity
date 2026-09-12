@@ -226,7 +226,10 @@
     position:absolute;right:0;top:-2vh;z-index:1;line-height:0;
     width:clamp(200px,22vw,300px);
   }
-  .clowder svg{overflow:visible}
+  /* mascots must paint past their own viewBox: the snout, ear tips and thumping
+     tail all extend beyond it, and motion (sniff pop, ear flick, tail thump) pushes
+     them further — SVG's default overflow:hidden was slicing them into flat cliffs */
+  .clowder svg,.stander svg,.sitter svg,.runner svg{overflow:visible}
   .leash{
     position:absolute;inset:0;z-index:0;pointer-events:none;
   }
@@ -320,17 +323,24 @@
   }
   .step p{margin:0;font-size:1rem;font-weight:500;max-width:38ch}
   /* SIT. — a dog demonstrates, tail thumping on the ground */
-  .sitter{
-    position:relative;z-index:2;line-height:0;
-    width:clamp(140px,15vw,196px);
-    margin:clamp(28px,5vh,52px) 0 0 clamp(4px,3vw,44px);
+  .sitters{
+    position:relative;z-index:2;
+    display:flex;align-items:flex-end;justify-content:space-between;
+    gap:clamp(16px,4vw,48px);
+    margin:clamp(28px,5vh,52px) clamp(4px,2vw,40px) 0 clamp(4px,3vw,44px);
   }
+  .sitter{
+    line-height:0;flex:none;
+    width:clamp(140px,15vw,196px);
+  }
+  /* the second, smaller sitting dog — mirrored so the pair face each other */
+  .sitter-sm{width:clamp(96px,10vw,132px);transform:scaleX(-1)}
   .sitter .sittail{
     transform-box:fill-box;transform-origin:92% 88%;
     animation:thump 2.6s ease-in-out infinite;
   }
   @keyframes thump{0%,48%,100%{transform:rotate(0)}56%{transform:rotate(-16deg)}64%{transform:rotate(0)}72%{transform:rotate(-16deg)}80%{transform:rotate(0)}}
-  .sitter .ear{transform-box:fill-box;transform-origin:12% 78%;animation:sitflick 5.4s ease-in-out infinite}
+  .sitter .ear{transform-box:fill-box;transform-origin:48% 90%;animation:sitflick 5.4s ease-in-out infinite}
   @keyframes sitflick{0%,64%,76%,100%{transform:rotate(0)}70%{transform:rotate(-26deg)}}
   .lane{position:absolute;left:0;right:0;bottom:calc(var(--dome) + 6px);z-index:1;pointer-events:none}
   html:not(.motion) .lane{display:none}
@@ -443,9 +453,9 @@
   .qmark{transform-box:fill-box;transform-origin:50% 100%;animation:qwig 5.2s ease-in-out infinite}
   @keyframes qwig{0%,100%{transform:rotate(-6deg)}50%{transform:rotate(8deg)}}
   .dog .leg{transform-box:fill-box;transform-origin:50% 10%}
-  .dog .tail{transform-box:fill-box;transform-origin:100% 100%;animation:wagslow 1.5s ease-in-out infinite}
+  .dog .tail{transform-box:fill-box;transform-origin:92% 90%;animation:wagslow 1.5s ease-in-out infinite}
   @keyframes wagslow{0%,100%{transform:rotate(0)}50%{transform:rotate(14deg)}}
-  .dog .ear{transform-box:fill-box;transform-origin:12% 78%}
+  .dog .ear{transform-box:fill-box;transform-origin:50% 96%}
   .dog-all{transform-box:fill-box;transform-origin:50% 100%}
   .dog.idle .dog-all{animation:idlehop 4.6s ease-in-out infinite}
   @keyframes idlehop{0%,50%,72%,100%{transform:translateY(0)}56%{transform:translateY(-14px)}62%{transform:translateY(0)}67%{transform:translateY(-8px)}}
@@ -481,7 +491,7 @@
     .stander{margin-right:auto;margin-left:0}
     .cue{display:none}
     .toy-bone,.toy-ball{display:none}
-    .sitter{margin-left:0}
+    .sitters{gap:clamp(12px,4vw,28px)}
   }
   @media (max-height:820px){
     h1.poster{font-size:clamp(2.4rem,8.6vw,7rem)}
@@ -655,18 +665,9 @@
           <p>That's it. We'll send you one message when we launch &mdash; no spam, just that.</p>
         </div>
       </div>
-      <div class="sitter" aria-hidden="true">
-        <svg viewBox="0 0 210 200">
-          <ellipse cx="100" cy="192" rx="78" ry="8" fill="rgba(22,22,22,.16)"/>
-          <path class="sittail" d="M46 184 C 28 186 12 180 4 166 C -1 156 6 146 17 150 C 26 154 28 166 40 172 C 46 175 54 177 58 178 Z" fill="#161616"/>
-          <path d="M44 180 C 24 172 16 148 24 126 C 30 108 44 98 60 96 C 76 94 88 98 96 86 C 104 66 112 54 124 48 C 136 44 146 48 150 58 C 154 70 152 88 150 104 C 149 124 148 140 136 156 C 108 162 72 174 44 180 Z" fill="#161616"/>
-          <path d="M104 120 L118 121 L117 180 Q125 181 125 187 Q125 192 118 192 L107 192 Q102 192 103 185 Z" fill="#161616"/>
-          <path d="M130 120 L144 121 L143 180 Q151 181 151 187 Q151 192 144 192 L133 192 Q128 192 129 185 Z" fill="#161616"/>
-          <path d="M112 84 C 102 66 104 40 122 26 C 136 15 158 12 172 20 C 188 16 202 26 205 38 C 208 50 200 58 188 58 C 182 70 170 78 154 80 C 138 84 120 88 112 84 Z" fill="#161616"/>
-          <path class="ear" d="M136 34 C 132 12 146 0 162 4 C 178 9 180 30 164 40 C 154 46 142 44 136 34 Z" fill="#161616"/>
-          <g class="eye"><circle class="ew" cx="128" cy="46" r="12" fill="#fff"/><circle class="pp" cx="128" cy="46" r="5" fill="#161616"/></g>
-          <g class="eye"><circle class="ew" cx="155" cy="50" r="12" fill="#fff"/><circle class="pp" cx="155" cy="50" r="5" fill="#161616"/></g>
-        </svg>
+      <div class="sitters">
+        <div class="sitter" id="sitter" aria-hidden="true"></div>
+        <div class="sitter sitter-sm" id="sitter-sm" aria-hidden="true"></div>
       </div>
     </div>
     <div class="lane" aria-hidden="true"><div class="runner" id="runner"></div></div>
@@ -711,19 +712,19 @@
 
 /* ---------- shared character templates (side-view dog + walking cat) ---------- */
 function dogSVG(cls){
-  return '<svg class="dog '+cls+'" viewBox="0 0 260 172" aria-hidden="true">'
-  +'<ellipse cx="126" cy="162" rx="84" ry="8" fill="rgba(22,22,22,.13)"/>'
+  /* side-view dog traced 1:1 from the Barkley reference (mirrored to face travel direction) */
+  return '<svg class="dog '+cls+'" viewBox="0 0 224 214" aria-hidden="true">'
+  +'<ellipse cx="105" cy="207" rx="64" ry="7" fill="rgba(22,22,22,.13)"/>'
   +'<g class="dog-all">'
-  +'<path class="tail" d="M60 96 C 34 88 16 68 12 42 C 10 28 20 22 30 28 C 38 34 36 48 42 60 C 48 72 58 80 68 84 Z" fill="#161616"/>'
-  +'<g class="leg l1"><path d="M66 98 L80 100 L79 138 Q86 139 86 145 Q86 150 79 150 L68 150 Q63 150 64 144 Z" fill="#161616"/></g>'
-  +'<g class="leg l2"><path d="M92 102 L105 103 L104 138 Q111 139 111 145 Q111 150 104 150 L94 150 Q89 150 90 144 Z" fill="#161616"/></g>'
-  +'<g class="leg l3"><path d="M128 102 L141 103 L140 138 Q147 139 147 145 Q147 150 140 150 L130 150 Q125 150 126 144 Z" fill="#161616"/></g>'
-  +'<g class="leg l4"><path d="M154 98 L168 100 L167 138 Q174 139 174 145 Q174 150 167 150 L156 150 Q151 150 152 144 Z" fill="#161616"/></g>'
-  +'<path d="M52 110 C 36 104 30 84 40 68 C 50 54 74 46 102 46 C 132 46 160 52 176 64 C 188 74 190 92 178 102 C 164 112 136 114 108 114 C 84 114 62 114 52 110 Z" fill="#161616"/>'
-  +'<path d="M162 84 C 152 66 154 40 172 26 C 186 15 208 12 222 20 C 238 16 252 26 255 38 C 258 50 250 58 238 58 C 232 70 220 78 204 80 C 188 84 170 88 162 84 Z" fill="#161616"/>'
-  +'<path class="ear" d="M186 34 C 182 12 196 0 212 4 C 228 9 230 30 214 40 C 204 46 192 44 186 34 Z" fill="#161616"/>'
-  +'<g class="eye"><circle class="ew" cx="178" cy="46" r="13" fill="#fff"/><circle class="pp" cx="178" cy="46" r="5.5" fill="#161616"/></g>'
-  +'<g class="eye"><circle class="ew" cx="205" cy="50" r="13" fill="#fff"/><circle class="pp" cx="205" cy="50" r="5.5" fill="#161616"/></g>'
+  +'<path class="tail" d="M63 113 C 50 101 31 86 14 72 C 13 77 12 82 16 89 C 21 91 19 97 25 101 C 35 111 44 119 50 125 C 55 121 60 117 63 113 Z" fill="#161616"/>'
+  +'<g class="leg l1"><path d="M54 144 L70 144 L70 197 Q70 204 65 204 L59 204 Q54 204 54 197 Z" fill="#161616"/></g>'
+  +'<g class="leg l2"><path d="M77 144 L91 144 L91 197 Q91 204 86 204 L82 204 Q77 204 77 197 Z" fill="#161616"/></g>'
+  +'<g class="leg l3"><path d="M121 144 L135 144 L135 197 Q135 204 130 204 L126 204 Q121 204 121 197 Z" fill="#161616"/></g>'
+  +'<g class="leg l4"><path d="M142 144 L156 144 L156 197 Q156 204 151 204 L147 204 Q142 204 142 197 Z" fill="#161616"/></g>'
+  +'<path d="M140 42 C148 37 156 37 164 44 C180 54 192 64 201 73 C209 79 214 83 212 88 C210 95 203 99 196 101 C189 107 183 112 179 118 C174 126 170 134 167 141 C164 148 162 152 160 157 C140 159 120 161 106 161 C92 160 72 155 56 150 C55 140 54 130 55 120 C60 110 70 104 82 101 C88 99 92 98 96 92 C102 82 105 62 108 46 C110 33 114 23 121 20 C127 22 133 30 140 42 Z" fill="#161616"/>'
+  +'<path class="ear" d="M150 44 C152 31 156 21 163 18 C169 20 175 28 182 42 Z" fill="#161616"/>'
+  +'<g class="eye"><circle class="ew" cx="133" cy="61" r="12" fill="#fff"/><circle class="pp" cx="133" cy="61" r="5" fill="#161616"/></g>'
+  +'<g class="eye"><circle class="ew" cx="166" cy="62" r="12" fill="#fff"/><circle class="pp" cx="166" cy="62" r="5" fill="#161616"/></g>'
   +'</g></svg>';
 }
 function catWalkSVG(){
@@ -744,10 +745,27 @@ function catWalkSVG(){
   +'<path d="M191 66 L199 70 L191 74 Z" fill="#FF6B4A"/>'
   +'</g></svg>';
 }
+/* sitting dog — same Barkley construction as the big sitter, used at two sizes */
+/* sitting Barkley — pointy back ear + floppy front ear, ring eyes, fat frayed tail */
+function sitterSVG(){
+  return '<svg viewBox="0 0 210 205" aria-hidden="true">'
+  +'<ellipse cx="100" cy="196" rx="80" ry="8" fill="rgba(22,22,22,.16)"/>'
+  +'<path class="sittail" d="M56 150 C 48 128 36 102 24 82 C 19 74 13 68 11 70 C 13 78 17 90 21 100 C 28 118 38 140 48 158 C 51 155 54 152 56 150 Z" fill="#161616"/>'
+  +'<path d="M40 186 C 20 176 14 150 22 128 C 28 110 42 100 58 98 C 74 96 84 98 94 88 C 100 68 108 54 122 46 C 134 40 146 44 150 56 C 154 70 152 90 150 108 C 149 130 148 150 138 166 C 110 178 66 188 40 186 Z" fill="#161616"/>'
+  +'<path d="M100 122 L120 122 L119 186 Q126 187 126 193 Q126 198 119 198 L103 198 Q98 198 99 191 Z" fill="#161616"/>'
+  +'<path d="M126 122 L146 122 L145 186 Q152 187 152 193 Q152 198 145 198 L129 198 Q124 198 125 191 Z" fill="#161616"/>'
+  +'<path d="M108 88 C 95 68 101 38 121 26 C 138 15 159 15 173 28 C 177 42 177 54 193 58 C 214 63 227 67 228 75 C 227 81 216 84 204 84 C 191 90 176 92 164 90 C 145 96 126 96 108 88 Z" fill="#161616"/>'
+  +'<path class="ear" d="M122 32 C 116 4 131 -8 143 2 C 155 11 152 32 138 42 C 131 43 125 42 122 32 Z" fill="#161616"/>'
+  +'<path d="M152 32 C 148 11 162 1 177 7 C 191 13 193 31 181 40 C 172 46 158 44 152 32 Z" fill="#161616"/>'
+  +'<g class="eye"><circle class="ew" cx="130" cy="52" r="12.5" fill="#fff" stroke="#161616" stroke-width="2.5"/><circle class="pp" cx="130" cy="52" r="5" fill="#161616"/></g>'
+  +'<g class="eye"><circle class="ew" cx="158" cy="56" r="12.5" fill="#fff" stroke="#161616" stroke-width="2.5"/><circle class="pp" cx="158" cy="56" r="5" fill="#161616"/></g>'
+  +'</svg>';
+}
 var standerEl = document.getElementById('stander');
 var runnerEl = document.getElementById('runner');
 if (standerEl) standerEl.innerHTML = dogSVG('idle');
-if (runnerEl) runnerEl.innerHTML = dogSVG('run') + catWalkSVG();
+if (runnerEl) runnerEl.innerHTML = catWalkSVG();
+[].slice.call(document.querySelectorAll('#sitter, #sitter-sm')).forEach(function(el){ el.innerHTML = sitterSVG(); });
 
 var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 var fine = matchMedia('(pointer:fine)').matches;

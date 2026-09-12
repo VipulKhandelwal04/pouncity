@@ -181,7 +181,13 @@
   .hero-cta:active{transform:translateY(0)}
   /* the peeking dog rests its paws on the cream ledge and noses up into the hero */
   .peekdog{
-    position:absolute;right:clamp(-16px,4vw,90px);bottom:calc(5vh - var(--dome));
+    position:absolute;right:clamp(-16px,4vw,90px);
+    /* Glue the paws to the cream ledge across viewport HEIGHT + browser zoom. The ledge is a
+       function of --dome (viewport width); the dog must be too. The hero's own padding-bottom
+       is calc(var(--dome) + 4vh), so measuring bottom from the section boundary means
+       cancelling that 4vh — leaving a pure --dome offset. The dog sits just BELOW the ledge and
+       the higher-z cream section clips the paw tips exactly at the curve, so there is never a gap. */
+    bottom:calc(-4vh - var(--dome) * 0.34);
     width:clamp(280px,40vw,460px);z-index:2;line-height:0;pointer-events:none;
   }
   /* tilt kept on its own layer so the GSAP yPercent reveal (on .peekdog) never fights it;

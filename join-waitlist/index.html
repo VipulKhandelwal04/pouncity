@@ -138,6 +138,7 @@
 
   /* ============ hero ============ */
   .s-hero{
+    position:relative;
     min-height:100svh;
     display:flex;flex-direction:column;
     padding:calc(72px + 2vh) clamp(20px,4vw,48px) calc(var(--dome) + 4vh);
@@ -178,21 +179,16 @@
   }
   .hero-cta:hover{transform:translateY(-2px)}
   .hero-cta:active{transform:translateY(0)}
-  .bigdog-wrap{
-    position:absolute;bottom:calc(-8vh - var(--dome));right:clamp(-30px,5vw,110px);
-    width:clamp(320px,45vw,700px);
-    z-index:2;line-height:0;pointer-events:none;
+  /* the peeking dog rests its paws on the cream ledge and noses up into the hero */
+  .peekdog{
+    position:absolute;right:clamp(-16px,4vw,90px);bottom:calc(5vh - var(--dome));
+    width:clamp(280px,40vw,460px);z-index:2;line-height:0;pointer-events:none;
   }
-  .bigdog .head-all{transform-box:fill-box;transform-origin:50% 100%}
-  html.motion .bigdog .head-all{animation:sway 7s ease-in-out infinite}
-  @keyframes sway{0%,100%{transform:rotate(-1.3deg)}50%{transform:rotate(1.3deg)}}
-  /* WAG! — the hero dog acts out the cursor word */
-  .hero-tail{
-    position:absolute;right:-7%;bottom:0;width:21%;line-height:0;
-    transform-origin:18% 96%;
-    animation:wagbig .6s ease-in-out infinite;
-  }
-  @keyframes wagbig{0%,100%{transform:rotate(-9deg)}50%{transform:rotate(13deg)}}
+  /* tilt kept on its own layer so the GSAP yPercent reveal (on .peekdog) never fights it;
+     ~5deg CW lays the dog's paw-line along the yellow/cream dome ledge, pivoting on the anchored left paw */
+  .peekdog-tilt{transform:rotate(5deg);transform-origin:30% 95%;line-height:0}
+  /* iris resting gaze (used on touch / no-pointer, where the cursor-follow JS doesn't run) */
+  .peekdog .iris{transform:translate(0px,-2px)}
   .cue{
     display:flex;align-items:center;gap:8px;
     margin:18px 0 0 6px;
@@ -202,7 +198,8 @@
   html.motion .cue svg{animation:cuebob 1.6s ease-in-out infinite}
   @keyframes cuebob{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
   .toy{position:absolute;line-height:0;z-index:1;pointer-events:none}
-  .toy-yarn{top:4%;right:8%;width:clamp(44px,5.5vw,84px)}
+  /* anchored to the full-width section (see .s-hero position:relative) so it clears the centred headline in the margin */
+  .toy-yarn{top:24%;right:2.5%;width:clamp(44px,5.5vw,84px)}
   .toy-ball{top:34%;left:4%;width:clamp(40px,5vw,74px)}
   .toy-bone{top:56%;right:3%;width:clamp(52px,6.5vw,96px)}
 
@@ -409,8 +406,6 @@
     84%{transform:translate(-2.5vw,-20px) rotate(-60deg)}
     92%,100%{transform:translate(0,0) rotate(0)}
   }
-  .celebrate .bigdog .eye{animation:eyepop .55s ease-in-out 3}
-  @keyframes eyepop{0%,100%{transform:scale(1)}50%{transform:scale(1.28)}}
   .fineprint{font-size:.82rem;margin:0;color:#4c4638}
   footer{
     width:100%;
@@ -441,7 +436,6 @@
   html.motion .eye,html:not(.motion) .eye{animation:blink 5.6s ease-in-out infinite}
   .eye .pp{transform-box:fill-box}
   @keyframes blink{0%,94.5%,100%{transform:scaleY(1)}96.6%{transform:scaleY(.06)}}
-  .bigdog .eye{animation-duration:7.3s}
   .peek .eye{animation-duration:4.7s;animation-delay:.9s}
   .stander .eye{animation-duration:6.4s;animation-delay:1.7s}
   .clowder .tail{transform-box:fill-box;transform-origin:0% 100%;animation:flick 3.4s ease-in-out infinite}
@@ -482,8 +476,6 @@
       flex-direction:column;align-items:flex-start;text-align:left;margin-left:0;gap:14px;
     }
     .row:nth-child(even){align-items:flex-end;text-align:right}
-    .bigdog-wrap{width:min(88vw,420px);left:50%;right:auto;transform:translateX(-50%)}
-    .hero-stage{padding-bottom:min(62vw,300px)}
     .hero-sub{max-width:100%;margin:22px 0 0}
     .hero-cta{align-self:stretch;display:block;text-align:center}
     .steps-wrap{flex-direction:column}
@@ -492,15 +484,14 @@
     .cue{display:none}
     .toy-bone,.toy-ball{display:none}
     .sitters{gap:clamp(12px,4vw,28px)}
+    /* the dog straddles the dome's peak here, so the ledge under it is ~flat —
+       drop to a near-level cock instead of the desktop 5deg ledge-follow */
+    .peekdog-tilt{transform:rotate(2deg)}
   }
   @media (max-height:820px){
     h1.poster{font-size:clamp(2.4rem,8.6vw,7rem)}
     .s-hero{padding-top:80px}
     .hero-sub p{margin-bottom:12px}
-  }
-  /* short desktop windows: keep the ear tips below the headline */
-  @media (max-height:820px) and (min-width:721px){
-    .bigdog-wrap{width:clamp(300px,36vw,560px);bottom:calc(-10vh - var(--dome))}
   }
   @media (prefers-reduced-motion:reduce){
     *{animation:none!important;transition:none!important}
@@ -526,26 +517,14 @@
 <main id="top">
 
   <!-- ================= HERO ================= -->
-  <section class="s-hero" data-cursor="WAG!" data-ht="light">
+  <section class="s-hero" data-cursor="PEEK!" data-ht="light">
+    <span class="toy toy-yarn" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span>
     <div class="hero-stage">
       <h1 class="poster" id="hero-h1">Good things come to those who wag.</h1>
-
-      <span class="toy toy-yarn" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span>
       <span class="toy toy-ball" aria-hidden="true"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="27" fill="#FFF7E6"/><circle cx="30" cy="30" r="27" fill="none" stroke="#161616" stroke-width="2.5"/><path d="M8 14 Q30 30 8 46 M52 14 Q30 30 52 46" stroke="#FF6B4A" stroke-width="3" fill="none" stroke-linecap="round"/></svg></span>
       <span class="toy toy-bone" aria-hidden="true"><svg viewBox="0 0 96 48"><path d="M22 18 L74 18 L74 30 L22 30 Z" fill="#FFF7E6"/><circle cx="18" cy="15" r="10" fill="#FFF7E6"/><circle cx="18" cy="33" r="10" fill="#FFF7E6"/><circle cx="78" cy="15" r="10" fill="#FFF7E6"/><circle cx="78" cy="33" r="10" fill="#FFF7E6"/><path d="M22 18 L74 18 M22 30 L74 30" stroke="#161616" stroke-width="2.5" stroke-linecap="round"/><path d="M18 5 A10 10 0 0 0 8 15 A10 10 0 0 0 12 23 M18 43 A10 10 0 0 1 8 33 M78 5 A10 10 0 0 1 88 15 A10 10 0 0 1 84 23 M78 43 A10 10 0 0 0 88 33" stroke="#161616" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg></span>
 
-      <div class="bigdog-wrap" aria-hidden="true">
-        <svg class="bigdog" viewBox="0 0 360 250">
-          <g class="head-all">
-            <ellipse cx="108" cy="64" rx="38" ry="64" transform="rotate(24 108 64)" fill="#161616"/>
-            <ellipse cx="252" cy="62" rx="36" ry="60" transform="rotate(-30 252 62)" fill="#161616"/>
-            <path d="M42 310 L42 166 Q42 44 180 44 Q318 44 318 166 L318 310 Z" fill="#161616"/>
-            <g class="eye"><circle class="ew" cx="134" cy="150" r="44" fill="#fff"/><circle class="pp big" cx="134" cy="150" r="18" fill="#161616"/></g>
-            <g class="eye"><circle class="ew" cx="226" cy="150" r="44" fill="#fff"/><circle class="pp big" cx="226" cy="150" r="18" fill="#161616"/></g>
-          </g>
-        </svg>
-        <div class="hero-tail" aria-hidden="true"><svg viewBox="0 0 120 210"><path d="M6 210 C -8 130 24 62 82 40 C 96 35 106 40 104 50 C 102 58 92 62 84 68 C 58 86 48 124 50 160 C 51 180 48 198 44 210 Z" fill="#161616"/></svg></div>
-      </div>
+      <div class="peekdog" aria-hidden="true"><div class="peekdog-tilt"><svg viewBox="0 0 729 407"><path d="M342 287L324 296L315 306L311 320L314 334L318 341L329 351L345 358L363 362L366 366L368 380L376 380L374 362L395 347L402 340L409 330L413 319L413 308L411 301L408 295L402 289L388 283L368 282L358 283Z" fill="#161616"/><path d="M702 146L693 131L684 122L673 115L653 108L605 96L583 87L555 72L530 54L507 33L491 23L493 21L510 22L508 20L495 16L474 16L473 17L469 16L472 13L485 7L483 6L471 8L459 14L457 13L461 9L461 7L451 10L441 17L430 28L418 46L385 41L346 41L322 44L295 50L279 56L276 56L248 68L227 80L225 80L216 72L201 63L188 58L177 57L182 61L181 62L159 61L158 63L172 67L173 69L154 72L141 79L141 80L145 79L154 80L145 84L133 94L132 96L141 91L145 92L126 122L116 135L98 154L81 168L32 200L21 211L12 227L9 240L9 255L14 277L25 302L35 319L50 340L46 344L29 345L24 348L16 356L7 373L6 378L7 390L14 394L20 395L21 383L25 375L28 373L29 374L28 377L29 386L35 394L47 399L67 400L65 393L65 379L68 370L76 360L78 361L76 370L77 391L81 397L91 401L105 401L115 399L116 381L120 372L126 365L128 367L127 369L128 370L129 399L138 398L152 392L161 380L188 380L193 361L195 359L207 380L267 380L268 379L268 363L271 346L276 329L281 318L296 295L326 266L331 258L334 249L336 223L323 124L323 81L322 80L324 78L337 123L355 208L362 230L368 242L373 249L385 259L409 269L429 281L451 303L462 319L472 339L479 359L483 380L543 380L549 337L551 334L561 346L575 356L570 368L569 381L572 388L576 392L586 397L594 399L601 399L601 366L602 365L607 370L611 377L614 388L614 399L623 401L638 401L646 398L652 390L653 381L651 366L652 360L657 365L663 378L664 389L662 400L675 400L685 398L692 395L699 386L699 373L700 372L707 382L709 395L712 395L719 392L723 387L722 374L713 356L707 350L698 345L682 344L677 339L668 334L651 329L675 294L687 269L697 242L705 209L706 194L708 186L706 159Z" fill="#161616"/><path d="M339 303L339 301L343 297L359 292L378 292L381 295L381 297L378 300L369 304L351 307L344 306Z" fill="#FFF7E6"/><ellipse class="cornea" cx="247" cy="264" rx="21" ry="26" fill="#FFF7E6" transform="rotate(14 247 264)"/><ellipse class="cornea" cx="450" cy="226" rx="21" ry="26" fill="#FFF7E6" transform="rotate(-14 450 226)"/><g class="iris" data-cx="247" data-cy="264" data-rx="21" data-ry="26" data-rot="14"><circle cx="247" cy="264" r="14" fill="#161616"/><circle cx="242" cy="258" r="3.1" fill="#FFF7E6"/></g><g class="iris" data-cx="450" data-cy="226" data-rx="21" data-ry="26" data-rot="-14"><circle cx="450" cy="226" r="14" fill="#161616"/><circle cx="445" cy="220" r="3.1" fill="#FFF7E6"/></g></svg></div></div>
 
       <div class="hero-sub" id="hero-sub">
         <p>Pouncity is a new thing for cats, dogs &amp; their humans. We're building something your pet is going to love &mdash; it's almost house-trained. The waitlist starts with a short survey at the door.</p>
@@ -842,6 +821,39 @@ if (fine && !reduced) (function(){
   }
 })();
 
+/* ---------- hero peeking dog: the dark iris slides within the fixed cream cornea toward the pointer.
+   Clamped to an inset of each (leaning) cornea ellipse so the iris always stays on the eye-white
+   and a cream crescent shows on the far side — a real eye, not a googly pupil. ---------- */
+if (fine && !reduced) (function(){
+  var svg = document.querySelector('.peekdog svg'); if (!svg) return;
+  var R = 14, ENGAGE = 0.82; // iris radius; how far toward the cornea rim the iris may reach
+  var eyes = [].slice.call(svg.querySelectorAll('.iris')).map(function(g){
+    return { g: g, cx: +g.dataset.cx, cy: +g.dataset.cy,
+             ax: (+g.dataset.rx) - R, ay: (+g.dataset.ry) - R,
+             rot: (+g.dataset.rot) * Math.PI / 180 };
+  });
+  if (!eyes.length) return;
+  var mx = innerWidth/2, my = 0, raf = 0, pt = svg.createSVGPoint();
+  addEventListener('mousemove', function(e){ mx = e.clientX; my = e.clientY; if (!raf) raf = requestAnimationFrame(look); });
+  function look(){
+    raf = 0;
+    var m = svg.getScreenCTM(); if (!m) return;
+    pt.x = mx; pt.y = my;
+    var u = pt.matrixTransform(m.inverse());
+    for (var i = 0; i < eyes.length; i++){
+      var o = eyes[i], c = Math.cos(o.rot), s = Math.sin(o.rot);
+      var dx = u.x - o.cx, dy = u.y - o.cy;
+      var lx = dx*c + dy*s, ly = -dx*s + dy*c;          // pointer direction in the eye's own frame
+      var L = Math.hypot(lx, ly) || 1, ux = lx/L, uy = ly/L;
+      var b = 1 / Math.sqrt((ux/o.ax)*(ux/o.ax) + (uy/o.ay)*(uy/o.ay)); // reach to the inset-ellipse rim
+      var olx = ux*b*ENGAGE, oly = uy*b*ENGAGE;
+      var ox = olx*c - oly*s, oy = olx*s + oly*c;        // back to user space
+      o.g.style.transform = 'translate(' + ox + 'px,' + oy + 'px)';
+    }
+  }
+  look();
+})();
+
 /* ---------- motion layer: GSAP + ScrollTrigger + SplitText + Lenis ---------- */
 if (reduced || !window.gsap || !window.ScrollTrigger || !window.SplitText) return;
 var html = document.documentElement;
@@ -896,7 +908,7 @@ if (fine) (function(){
     }
     shown = null;
   }
-  setWord('WAG!');
+  setWord('PEEK!');
   addEventListener('mousemove', function(e){ mouse.x = e.clientX; mouse.y = e.clientY; seen = true; });
   /* the word steps aside over links and buttons so it never garbles a label */
   document.addEventListener('mouseover', function(e){
@@ -941,7 +953,7 @@ function buildReveals(){
     stagger: 0.022,
     immediateRender: true
   })
-  .from('.bigdog-wrap', { yPercent: 70, duration: 1.1, ease: 'power3.out', immediateRender: true }, 0.25)
+  .from('.peekdog', { yPercent: 55, duration: 1.1, ease: 'power3.out', immediateRender: true }, 0.25)
   .from('#hero-sub', { y: 34, autoAlpha: 0, duration: 0.7, ease: 'power2.out', immediateRender: true }, 0.6)
   .from('.toy', { scale: 0, duration: 0.7, ease: 'back.out(2.2)', stagger: 0.09, immediateRender: true }, 0.5)
   .from('#cue', { autoAlpha: 0, duration: 0.5, immediateRender: true }, 1.0)

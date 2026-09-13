@@ -1,71 +1,74 @@
 # Setup — Ticket 01 (Account creation + Passport creation)
 
-This app is code-complete for Ticket 01, but needs credentials from a real
-Supabase project before auth and passport creation work end-to-end. None of
-this could be created on your behalf — it requires your accounts.
+Status: code complete and live-verified against a real Supabase project.
 
-## 1. Create a Supabase project
+## 1. Supabase project
 
-1. Go to https://supabase.com and create a new project.
-2. In **Project Settings → API**, copy the **Project URL** and **anon public
-   key**.
-3. Copy `.env.local.example` to `.env.local` and fill in:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+Uses an existing Supabase project (shared with other, unrelated tables —
+that's fine, `passports` is fully namespaced and RLS-scoped to its own
+rows). Credentials live in `.env.local` (gitignored, not committed):
 
-## 2. Run the database migrations
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+```
 
-In the Supabase dashboard's **SQL Editor**, run the two files in
-`supabase/migrations/` in order:
+Copy `.env.local.example` to `.env.local` and fill in your project's URL
+and anon public key from **Project Settings → API**. Never put the
+`service_role` key in this file or anywhere in the repo — it bypasses RLS
+entirely and this app never needs it (all writes go through the anon key
++ the signed-in user's own session).
 
-1. `0001_passports.sql` — creates the `passports` table with row-level
-   security scoped to the signed-in owner.
-2. `0002_passport_photos_bucket.sql` — creates the public `passport-photos`
-   storage bucket with upload/read policies.
+## 2. Database migrations — already applied
 
-(If you install the Supabase CLI and link the project, `supabase db push`
-will apply both automatically instead.)
+Both files in `supabase/migrations/` have been run against the live
+project via the Supabase SQL Editor:
 
-## 3. Enable magic link auth
+1. `0001_passports.sql` — `passports` table, RLS policies scoped to
+   `auth.uid() = owner_id`.
+2. `0002_passport_photos_bucket.sql` — public `passport-photos` bucket,
+   5 MB / image-only limits, upload policy scoped to the caller's own
+   `{user_id}/` folder.
 
-Magic link (email OTP) is enabled by default in Supabase Auth — no action
-needed beyond having a valid email provider configured (Supabase's default
-works for testing; configure a custom SMTP provider before real users rely
-on it, since the default has strict rate limits).
+Re-applying `0001` is idempotent (`create table if not exists`). Re-running
+`0002`'s `create policy` statements will error if already applied — that's
+expected, not a problem (the bucket insert itself is idempotent via
+`on conflict`).
 
-## 4. Enable Google OAuth
+## 3. Auth providers — already configured
 
-1. Create an OAuth 2.0 Client ID in the
-   [Google Cloud Console](https://console.cloud.google.com/apis/credentials).
-2. Add this app's Supabase auth callback URL as an authorized redirect URI:
-   `https://<your-project-ref>.supabase.co/auth/v1/callback`
-3. In Supabase dashboard: **Authentication → Providers → Google**, paste the
-   Client ID and Client Secret, and enable the provider.
+- **Magic link (email OTP)** — enabled by default, live-verified: a real
+  email round-tripped through `/auth/v1/otp` and arrived in the inbox.
+- **Google OAuth** — configured in Google Cloud Console (OAuth client,
+  redirect URI set to `https://<project-ref>.supabase.co/auth/v1/callback`)
+  and enabled in Supabase **Authentication → Sign In / Providers → Google**.
+  Live-verified: `/auth/v1/authorize?provider=google` correctly redirects
+  to Google's real consent screen with the right `client_id` and
+  `redirect_uri`.
 
-## 5. Run it
+## 4. Run it
 
 ```bash
 npm install
 npm run dev
 ```
 
-Visit `/login`, sign in via magic link or Google, and you should land on
-`/passport/new` to create a passport, then `/passport` to view it.
+Visit `/login`, sign in via magic link or Google, land on `/passport/new`
+to create a passport, then `/passport` to view it.
 
-## What's already verified without credentials
+## Verified
 
 - `npm run typecheck` — passes
 - `npm run lint` — passes
-- `npm test` — 11 passing unit tests on the passport domain logic
-  (`src/lib/passport/passport-service.test.ts`), using an in-memory fake
-  repository. These do not require Supabase and will keep passing regardless
-  of credentials.
+- `npm test` — 11/11 passing (passport domain logic, in-memory repository,
+  no live dependency)
+- `npm run build` — passes
+- Live: `passports` table + RLS, `passport-photos` bucket + policies,
+  magic-link email delivery, Google OAuth redirect chain
 
-## Not yet verified (needs your Supabase project)
+## Not yet verified
 
-- Magic link email delivery and callback flow
-- Google OAuth sign-in flow
-- Passport creation actually persisting to Postgres via
-  `SupabasePassportRepository`
-- Photo upload to Supabase Storage
-- Row-level security actually restricting owners to their own passport
+- The actual in-browser click-through (sign in → land on `/passport/new`
+  → upload a photo → see the created passport) hasn't been run manually
+  yet — everything underneath it has been verified piece by piece at the
+  protocol level instead.

@@ -3,22 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Pouncity | Join the Waitlist</title>
-  <meta name="description" content="Something new for cats, dogs & their humans. Take the survey and be first through the door.">
+  <title>Pouncity — good things come to those who wag.</title>
+  <meta name="description" content="One living diary for your pet — an AI diet & grooming plan, a daily tap, and hand-off to any sitter by link. For cats, dogs & their humans.">
+  <link rel="canonical" href="https://pouncity.vercel.app/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Pouncity">
-  <meta property="og:url" content="https://pouncity.vercel.app/join-waitlist">
-  <meta property="og:title" content="Pouncity | Join the Waitlist">
-  <meta property="og:description" content="Something new for cats, dogs & their humans. Take the survey and be first through the door.">
+  <meta property="og:url" content="https://pouncity.vercel.app/">
+  <meta property="og:title" content="Pouncity — good things come to those who wag.">
+  <meta property="og:description" content="One living diary for your pet — AI diet & grooming, a daily tap, and hand-off to any sitter. For cats, dogs & their humans.">
   <meta property="og:image" content="https://pouncity.vercel.app/og.png">
   <meta property="og:image:secure_url" content="https://pouncity.vercel.app/og.png">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Pouncity — good things come to those who wag. Join the waitlist.">
+  <meta property="og:image:alt" content="Pouncity — good things come to those who wag. One living diary for your pet.">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Pouncity | Join the Waitlist">
-  <meta name="twitter:description" content="Something new for cats, dogs & their humans. Take the survey and be first through the door.">
+  <meta name="twitter:title" content="Pouncity — good things come to those who wag.">
+  <meta name="twitter:description" content="One living diary for your pet — AI diet & grooming, a daily tap, and hand-off to any sitter.">
   <meta name="twitter:image" content="https://pouncity.vercel.app/og.png">
   <meta name="theme-color" content="#FFC93C">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><circle cx=%2216%22 cy=%2216%22 r=%2213%22 fill=%22%23FF6B4A%22/><path d=%22M4 12 Q16 20 28 10 M3 18 Q16 25 28 17 M6 25 Q17 29 25 22 M7 7 Q18 6 27 13%22 stroke=%22%23D8492B%22 stroke-width=%222%22 fill=%22none%22 stroke-linecap=%22round%22/><path d=%22M27 20 Q33 21 30 28%22 stroke=%22%23FF6B4A%22 stroke-width=%222.4%22 fill=%22none%22 stroke-linecap=%22round%22/></svg>">
@@ -26,7 +27,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap">
   <script>
-    /* Preloader gate: decide before first paint. First visit + motion OK only. */
+    /* Runs before first paint: preloader gate (first visit + motion OK only). */
     (function(){try{
       if(!matchMedia('(prefers-reduced-motion: reduce)').matches
         && localStorage.getItem('pouncity_seen') !== '1'){
@@ -122,6 +123,12 @@
   }
   .join-pill:hover{transform:translateY(-2px)}
   .join-pill:active{transform:translateY(0)}
+  /* light header nav (shared with /sign-in) */
+  .topnav{display:flex;align-items:center;gap:clamp(12px,2.2vw,26px)}
+  .topnav a{text-decoration:none;color:var(--ink);font:600 .92rem "Fredoka",sans-serif;letter-spacing:.01em;transition:color .4s ease,opacity .15s ease}
+  header[data-on="dark"] .topnav .navlink{color:var(--cream)}
+  .topnav .navlink:hover{opacity:.62}
+  @media (max-width:620px){.topnav .navlink{display:none}}
 
   /* ============ sections & domes ============ */
   main{position:relative}
@@ -205,7 +212,7 @@
   .toy{position:absolute;line-height:0;z-index:1;pointer-events:none}
   /* anchored to the full-width section (see .s-hero position:relative) so it clears the centred headline in the margin */
   .toy-yarn{top:24%;right:2.5%;width:clamp(44px,5.5vw,84px)}
-  .toy-ball{top:34%;left:4%;width:clamp(40px,5vw,74px)}
+  .toy-ball{top:34%;left:-3%;width:clamp(40px,5vw,74px)}
   .toy-bone{top:56%;right:3%;width:clamp(52px,6.5vw,96px)}
 
   /* ============ what pouncity does ============ */
@@ -303,16 +310,14 @@
     margin:0 0 clamp(44px,8vh,96px);
   }
   .steps-wrap{
-    display:flex;gap:clamp(24px,4vw,56px);align-items:flex-start;
-    flex-wrap:wrap;
+    display:grid;grid-template-columns:repeat(2,1fr);gap:clamp(20px,3vw,40px);align-items:start;
   }
   .step{
-    flex:1 1 340px;max-width:520px;
     background:var(--panel);border:2.5px solid var(--ink);border-radius:26px;
-    padding:clamp(24px,3vw,40px);
-    rotate:-1.4deg;
+    padding:clamp(22px,2.6vw,36px);
   }
-  .step + .step{rotate:1.6deg;margin-top:clamp(20px,4vh,64px)}
+  .step:nth-child(odd){rotate:-1.2deg}
+  .step:nth-child(even){rotate:1.2deg}
   .step-num{
     font-family:"Fredoka",sans-serif;font-weight:700;font-size:clamp(2.4rem,5vw,4rem);
     line-height:1;color:var(--coral-text);
@@ -412,15 +417,41 @@
     92%,100%{transform:translate(0,0) rotate(0)}
   }
   .fineprint{font-size:.82rem;margin:0;color:#4c4638}
+  /* rich footer (shared language with /sign-in) */
   footer{
     width:100%;
-    display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
-    padding:18px 0 max(18px,env(safe-area-inset-bottom));
-    border-top:1.5px solid rgba(255,247,230,.22);
+    border-top:1.5px solid rgba(255,247,230,.2);
+    padding:clamp(34px,6vh,60px) 0 max(22px,env(safe-area-inset-bottom));
   }
-  footer .wordmark{font-size:1.05rem;color:var(--cream)}
-  footer .wordmark .dot{width:13px;height:11px}
-  footer small{font-family:"DM Mono",monospace;font-size:.64rem;letter-spacing:.08em;color:var(--cream)}
+  .foot-top{
+    display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:clamp(24px,4vw,48px);
+    align-items:start;text-align:left;
+  }
+  .foot-brand .wordmark{font-size:1.5rem;color:var(--cream)}
+  .foot-brand .wordmark .dot{width:15px;height:13px}
+  .foot-brand p{margin:14px 0 0;max-width:26ch;font-size:.9rem;color:rgba(255,247,230,.68)}
+  .foot-col h3{
+    font:600 .72rem "DM Mono",monospace;letter-spacing:.16em;text-transform:uppercase;
+    color:rgba(255,247,230,.5);margin:0 0 14px;
+  }
+  .foot-col a{
+    display:block;text-decoration:none;color:var(--cream);
+    font-weight:500;font-size:.96rem;margin-bottom:10px;transition:opacity .15s ease;
+  }
+  .foot-col a:hover{opacity:.62}
+  .foot-bottom{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+    margin-top:clamp(30px,5vh,54px);padding-top:20px;
+    border-top:1.5px solid rgba(255,247,230,.14);
+  }
+  .foot-bottom small{
+    font-family:"DM Mono",monospace;font-size:.64rem;letter-spacing:.08em;color:rgba(255,247,230,.62);
+  }
+  @media (max-width:760px){
+    .foot-top{grid-template-columns:1fr 1fr;gap:30px 24px}
+    .foot-brand{grid-column:1 / -1}
+  }
+  @media (max-width:460px){.foot-top{grid-template-columns:1fr}}
 
   /* ============ cursor ============ */
   .cur{
@@ -483,8 +514,8 @@
     .row:nth-child(even){align-items:flex-end;text-align:right}
     .hero-sub{max-width:100%;margin:22px 0 0}
     .hero-cta{align-self:stretch;display:block;text-align:center}
-    .steps-wrap{flex-direction:column}
-    .step,.step + .step{max-width:100%;margin-top:0}
+    .steps-wrap{grid-template-columns:1fr}
+    .step{max-width:100%}
     .stander{margin-right:auto;margin-left:0}
     .cue{display:none}
     .toy-bone,.toy-ball{display:none}
@@ -516,7 +547,10 @@
 
 <header id="header" data-on="light">
   <a class="wordmark" href="#top" data-scrollto>pouncity<span class="dot" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span></a>
-  <a class="join-pill" href="#join" data-scrollto>Join the waitlist</a>
+  <nav class="topnav" aria-label="Primary">
+    <a class="navlink" href="#how" data-scrollto>How it works</a>
+    <a class="join-pill" href="/sign-in">Sign in</a>
+  </nav>
 </header>
 
 <main id="top">
@@ -532,8 +566,8 @@
       <div class="peekdog" aria-hidden="true"><div class="peekdog-tilt"><svg viewBox="0 0 729 407"><path d="M342 287L324 296L315 306L311 320L314 334L318 341L329 351L345 358L363 362L366 366L368 380L376 380L374 362L395 347L402 340L409 330L413 319L413 308L411 301L408 295L402 289L388 283L368 282L358 283Z" fill="#161616"/><path d="M702 146L693 131L684 122L673 115L653 108L605 96L583 87L555 72L530 54L507 33L491 23L493 21L510 22L508 20L495 16L474 16L473 17L469 16L472 13L485 7L483 6L471 8L459 14L457 13L461 9L461 7L451 10L441 17L430 28L418 46L385 41L346 41L322 44L295 50L279 56L276 56L248 68L227 80L225 80L216 72L201 63L188 58L177 57L182 61L181 62L159 61L158 63L172 67L173 69L154 72L141 79L141 80L145 79L154 80L145 84L133 94L132 96L141 91L145 92L126 122L116 135L98 154L81 168L32 200L21 211L12 227L9 240L9 255L14 277L25 302L35 319L50 340L46 344L29 345L24 348L16 356L7 373L6 378L7 390L14 394L20 395L21 383L25 375L28 373L29 374L28 377L29 386L35 394L47 399L67 400L65 393L65 379L68 370L76 360L78 361L76 370L77 391L81 397L91 401L105 401L115 399L116 381L120 372L126 365L128 367L127 369L128 370L129 399L138 398L152 392L161 380L188 380L193 361L195 359L207 380L267 380L268 379L268 363L271 346L276 329L281 318L296 295L326 266L331 258L334 249L336 223L323 124L323 81L322 80L324 78L337 123L355 208L362 230L368 242L373 249L385 259L409 269L429 281L451 303L462 319L472 339L479 359L483 380L543 380L549 337L551 334L561 346L575 356L570 368L569 381L572 388L576 392L586 397L594 399L601 399L601 366L602 365L607 370L611 377L614 388L614 399L623 401L638 401L646 398L652 390L653 381L651 366L652 360L657 365L663 378L664 389L662 400L675 400L685 398L692 395L699 386L699 373L700 372L707 382L709 395L712 395L719 392L723 387L722 374L713 356L707 350L698 345L682 344L677 339L668 334L651 329L675 294L687 269L697 242L705 209L706 194L708 186L706 159Z" fill="#161616"/><path d="M339 303L339 301L343 297L359 292L378 292L381 295L381 297L378 300L369 304L351 307L344 306Z" fill="#FFF7E6"/><ellipse class="cornea" cx="247" cy="264" rx="21" ry="26" fill="#FFF7E6" transform="rotate(14 247 264)"/><ellipse class="cornea" cx="450" cy="226" rx="21" ry="26" fill="#FFF7E6" transform="rotate(-14 450 226)"/><g class="iris" data-cx="247" data-cy="264" data-rx="21" data-ry="26" data-rot="14"><circle cx="247" cy="264" r="14" fill="#161616"/><circle cx="242" cy="258" r="3.1" fill="#FFF7E6"/></g><g class="iris" data-cx="450" data-cy="226" data-rx="21" data-ry="26" data-rot="-14"><circle cx="450" cy="226" r="14" fill="#161616"/><circle cx="445" cy="220" r="3.1" fill="#FFF7E6"/></g></svg></div></div>
 
       <div class="hero-sub" id="hero-sub">
-        <p>Pouncity is a new thing for cats, dogs &amp; their humans. We're building something your pet is going to love &mdash; it's almost house-trained. The waitlist starts with a short survey at the door.</p>
-        <a class="hero-cta" href="#join" data-scrollto>Join the waitlist</a>
+        <p>Pouncity is one living diary for your pet &mdash; an AI diet &amp; grooming plan, a daily tap, and hand-off to any sitter by link. Made for cats, dogs &amp; their humans.</p>
+        <a class="hero-cta" href="/sign-in">Create your pet's diary</a>
         <div class="cue" id="cue" aria-hidden="true">scroll<svg viewBox="0 0 16 20"><path d="M8 2 L8 15 M3 11 L8 17 L13 11" stroke="#161616" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       </div>
     </div>
@@ -632,21 +666,31 @@
     </div>
   </section>
 
-  <!-- ================= HOW JOINING WORKS ================= -->
+  <!-- ================= HOW POUNCITY WORKS ================= -->
   <section class="s-how dome" id="how" data-cursor="SIT." data-ht="coral">
     <div class="how-ghost" aria-hidden="true" id="how-ghost">Almost house&#8209;trained.</div>
     <div class="how-inner">
-      <h2 id="how-h2">How joining works</h2>
+      <h2 id="how-h2">How Pouncity works</h2>
       <div class="steps-wrap">
         <div class="step">
           <div class="step-num" aria-hidden="true">01.</div>
-          <h3>Take the survey</h3>
-          <p>A few quick questions about you &amp; your pet &mdash; about 5 minutes. The survey is the sign&#8209;up. No email form after.</p>
+          <h3>Create your pet's diary</h3>
+          <p>Sign in with a magic link or Google &mdash; no password. Add the basics: name, breed, age, weight, a photo. Quirks and vet contact whenever you're ready.</p>
         </div>
         <div class="step">
           <div class="step-num" aria-hidden="true">02.</div>
-          <h3>You're on the list</h3>
-          <p>That's it. We'll send you one message when we launch &mdash; no spam, just that.</p>
+          <h3>Get a diet &amp; grooming plan</h3>
+          <p>Tap once for a feeding plan and a grooming rhythm, tuned to your pet's breed, age &amp; weight. General guidance, not vet advice &mdash; shown every time.</p>
+        </div>
+        <div class="step">
+          <div class="step-num" aria-hidden="true">03.</div>
+          <h3>One tap a day</h3>
+          <p>Tap to say they were fed &mdash; logged with who and when, with a nudge if the day slips by. That's the whole habit, no chore.</p>
+        </div>
+        <div class="step">
+          <div class="step-num" aria-hidden="true">04.</div>
+          <h3>Hand it to any sitter</h3>
+          <p>Share one link and they open the full diary &mdash; feeding, quirks, vet &mdash; read-only, with no account to make.</p>
         </div>
       </div>
       <div class="sitters">
@@ -661,7 +705,7 @@
   <section class="s-join dome" id="join" data-cursor="JOIN" data-ht="dark">
     <div class="join-ghost" aria-hidden="true" id="join-ghost">Good human.</div>
     <div class="join-inner">
-      <h2 id="join-h2">Be first through the door.</h2>
+      <div><h2 class="join-h2">Your pet's diary, one tap away.</h2></div>
       <div class="signup">
         <svg class="peek" viewBox="0 0 170 100" aria-hidden="true">
           <ellipse cx="52" cy="42" rx="15" ry="26" transform="rotate(30 52 42)" fill="#FFF7E6"/>
@@ -672,14 +716,39 @@
           <path d="M79 82 L91 82 L85 91 Z" fill="#FF6B4A"/>
         </svg>
         <div class="survey-card">
-          <a class="cta" id="survey-cta" href="https://form.jotform.com/262526068123050" target="_blank" rel="noopener" aria-describedby="ok">Take the survey &amp; join the waitlist</a>
-          <p class="ok" id="ok"><span class="ball" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span><span id="ok-text">The survey opens in a new tab.</span></p>
-          <p class="fineprint">The survey is the sign-up. No spam, just one message when we launch.</p>
+          <a class="cta" href="/sign-in">Create your pet's diary</a>
+          <p class="ok"><span class="ball" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span><span>No passwords &mdash; a magic link or Google.</span></p>
+          <p class="fineprint">Free while we're in pilot &mdash; one living diary for your pet, ready for every sitter.</p>
         </div>
       </div>
       <footer>
-        <span class="wordmark">pouncity<span class="dot" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span></span>
-        <small>&copy; 2026 POUNCITY &middot; 100% VECTOR FUR</small>
+        <div class="foot-top">
+          <div class="foot-brand">
+            <span class="wordmark">pouncity<span class="dot" aria-hidden="true"><svg viewBox="0 0 34 30"><circle cx="14" cy="15" r="12" fill="#FF6B4A"/><path d="M3.5 11 Q14 18 25 9 M2.5 17 Q14 23 25.5 15 M6 23 Q15 27 22 21 M6.5 7 Q16 6 24 12" stroke="#D8492B" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M25 18 Q33 19 30 27 Q28 30 24 29" stroke="#FF6B4A" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></span></span>
+            <p>One living diary for your pet &mdash; for cats, dogs &amp; the humans who love them.</p>
+          </div>
+          <div class="foot-col">
+            <h3>Pouncity</h3>
+            <a href="#top" data-scrollto>Home</a>
+            <a href="#does" data-scrollto>What we do</a>
+            <a href="#how" data-scrollto>How it works</a>
+            <a href="/sign-in">Create your diary</a>
+          </div>
+          <div class="foot-col">
+            <h3>Legal</h3>
+            <a href="#privacy">Privacy</a>
+            <a href="#terms">Terms of use</a>
+          </div>
+          <div class="foot-col">
+            <h3>Say hi</h3>
+            <a href="https://instagram.com" target="_blank" rel="noopener">Instagram</a>
+            <a href="mailto:hello@pouncity.app">hello@pouncity.app</a>
+          </div>
+        </div>
+        <div class="foot-bottom">
+          <small>&copy; 2026 POUNCITY &middot; 100% VECTOR FUR</small>
+          <small>MADE WITH &#128062; FOR GOOD HUMANS</small>
+        </div>
       </footer>
     </div>
   </section>
@@ -781,25 +850,6 @@ var loaderDone;
   }
   requestAnimationFrame(tick);
   setTimeout(finish, 2600); /* fail-safe: never trap the visitor */
-})();
-
-/* ---------- survey handoff acknowledgment (vanilla) ---------- */
-(function(){
-  var cta = document.getElementById('survey-cta');
-  var okText = document.getElementById('ok-text');
-  var KEY = 'pouncity_started';
-  if (!cta) return;
-  function markStarted(celebrate){
-    if (celebrate) document.body.classList.add('celebrate');
-    if (okText) okText.textContent = 'Opened in a new tab. Finish it to lock your spot.';
-  }
-  var started = false;
-  try { started = localStorage.getItem(KEY) === '1'; } catch (e) {}
-  if (started) markStarted(false);
-  cta.addEventListener('click', function(){
-    try { localStorage.setItem(KEY, '1'); } catch (e) {}
-    markStarted(true);
-  });
 })();
 
 /* ---------- googly eyes follow the cursor (vanilla) ---------- */
@@ -1017,16 +1067,30 @@ function buildReveals(){
     });
   }
 
-  gsap.to('#does-ghost', {
-    xPercent: 5, ease: 'none',
-    scrollTrigger: { trigger: '.s-does', start: 'top bottom', end: 'bottom top', scrub: true }
-  });
+  /* Ghost words sweep the full width of the viewport, left → right, scrubbed to
+     scroll — so the entire phrase reads through the screen as the section scrolls,
+     rather than sitting with only its middle visible. Distances are functions of
+     the phrase width + viewport so each phrase clears both edges; invalidateOnRefresh
+     recomputes them on resize. */
+  function sweepGhost(id, sectionSel){
+    var el = document.getElementById(id);
+    if (!el) return;
+    var reach = function(){ return el.offsetWidth / 2 + innerWidth / 2 + 40; };
+    gsap.fromTo(el,
+      { xPercent: -50, x: function(){ return -reach(); } },
+      {
+        xPercent: -50, x: function(){ return reach(); }, ease: 'none',
+        scrollTrigger: {
+          trigger: sectionSel, start: 'top bottom', end: 'bottom top',
+          scrub: true, invalidateOnRefresh: true,
+        },
+      }
+    );
+  }
+  sweepGhost('does-ghost', '.s-does');
 
   /* --- how joining works --- */
-  gsap.to('#how-ghost', {
-    xPercent: -6, ease: 'none',
-    scrollTrigger: { trigger: '.s-how', start: 'top bottom', end: 'bottom top', scrub: true }
-  });
+  sweepGhost('how-ghost', '.s-how');
   var howSplit = new SplitText('#how-h2', { type: 'words' });
   gsap.from(howSplit.words, {
     y: 70, rotation: -4, autoAlpha: 0, duration: 0.8, ease: 'power3.out', stagger: 0.07,
@@ -1044,22 +1108,18 @@ function buildReveals(){
   });
 
   /* --- join --- */
-  gsap.to('#join-ghost', {
-    xPercent: -5, ease: 'none',
-    scrollTrigger: { trigger: '.s-join', start: 'top bottom', end: 'bottom top', scrub: true }
-  });
-  var joinSplit = new SplitText('#join-h2', { type: 'chars,words', charsClass: 'join-word' });
-  gsap.from(joinSplit.chars, {
-    yPercent: 110, autoAlpha: 0, duration: 0.7, ease: 'back.out(1.5)', stagger: 0.02,
-    scrollTrigger: { trigger: '#join-h2', start: 'top 80%' }
+  sweepGhost('join-ghost', '.s-join');
+  gsap.from('.s-join .join-h2', {
+    yPercent: 40, autoAlpha: 0, duration: 0.75, ease: 'back.out(1.4)',
+    scrollTrigger: { trigger: '.s-join', start: 'top 68%' }
   });
   gsap.from('.signup', {
     y: 80, autoAlpha: 0, duration: 0.8, ease: 'power3.out',
     scrollTrigger: { trigger: '.signup', start: 'top 86%' }
   });
-  gsap.from('footer', {
-    autoAlpha: 0, y: 24, duration: 0.6,
-    scrollTrigger: { trigger: 'footer', start: 'top 96%' }
+  gsap.from('.foot-top > *', {
+    autoAlpha: 0, y: 26, duration: 0.6, ease: 'power2.out', stagger: 0.08,
+    scrollTrigger: { trigger: 'footer', start: 'top 92%' }
   });
   gsap.from('.sitter', {
     y: 70, autoAlpha: 0, duration: 0.7, ease: 'back.out(1.6)',

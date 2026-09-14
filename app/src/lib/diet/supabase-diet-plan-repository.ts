@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PassportScopedArtifactRepository } from "@/lib/supabase/passport-scoped-artifact-repository";
 import type { DietPlan } from "./diet-plan";
 import type { DietPlanRepository } from "./diet-plan-repository";
 
@@ -24,39 +25,30 @@ function toDietPlan(row: DietPlanRow): DietPlan {
   };
 }
 
+function toRow(passportId: string, plan: DietPlan): Record<string, unknown> {
+  return {
+    id: plan.id,
+    passport_id: passportId,
+    current_food: plan.currentFood,
+    daily_calories: plan.dailyCalories,
+    feeding_guidance: plan.feedingGuidance,
+    disclaimer: plan.disclaimer,
+    generated_at: plan.generatedAt,
+  };
+}
+
 export class SupabaseDietPlanRepository implements DietPlanRepository {
-  constructor(private readonly client: SupabaseClient) {}
+  private readonly inner: PassportScopedArtifactRepository<DietPlan, DietPlanRow>;
 
-  async upsertForPassport(passportId: string, plan: DietPlan): Promise<DietPlan> {
-    const { data, error } = await this.client
-      .from("diet_plans")
-      .upsert(
-        {
-          id: plan.id,
-          passport_id: passportId,
-          current_food: plan.currentFood,
-          daily_calories: plan.dailyCalories,
-          feeding_guidance: plan.feedingGuidance,
-          disclaimer: plan.disclaimer,
-          generated_at: plan.generatedAt,
-        },
-        { onConflict: "passport_id" },
-      )
-      .select()
-      .single();
-
-    if (error) throw error;
-    return toDietPlan(data as DietPlanRow);
+  constructor(client: SupabaseClient) {
+    this.inner = new PassportScopedArtifactRepository(client, "diet_plans", toDietPlan, toRow);
   }
 
-  async findByPassportId(passportId: string): Promise<DietPlan | null> {
-    const { data, error } = await this.client
-      .from("diet_plans")
-      .select()
-      .eq("passport_id", passportId)
-      .maybeSingle();
+  upsertForPassport(passportId: string, plan: DietPlan): Promise<DietPlan> {
+    return this.inner.upsertForPassport(passportId, plan);
+  }
 
-    if (error) throw error;
-    return data ? toDietPlan(data as DietPlanRow) : null;
+  findByPassportId(passportId: string): Promise<DietPlan | null> {
+    return this.inner.findByPassportId(passportId);
   }
 }

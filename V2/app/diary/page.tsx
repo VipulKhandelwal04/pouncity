@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
+import { TabBar } from "@/components/TabBar";
 import { PetAvatar } from "@/components/PetAvatar";
 import { FeedingTap } from "@/components/FeedingTap";
 import {
@@ -72,7 +73,7 @@ export default function DiaryHome() {
   return (
     <>
       <AppHeader account={account} />
-      <main className="app-shell" style={{ paddingTop: 8 }}>
+      <main className="app-shell app-shell--tabbed" style={{ paddingTop: 8 }}>
         {diary ? (
           <OwnerHubBody
             diary={diary}
@@ -94,6 +95,7 @@ export default function DiaryHome() {
           </Link>
         </div>
       </main>
+      {diary && <TabBar />}
     </>
   );
 }

@@ -314,6 +314,52 @@ textarea.input { min-height: 92px; resize: vertical; line-height: 1.5; }
 }
 .pop { animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 
+/* ---- bottom tab bar — persistent nav (Diary / Find care / My circle) ---- */
+.app-shell--tabbed {
+  padding-bottom: calc(88px + env(safe-area-inset-bottom));
+}
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  background: var(--panel);
+  border-top: var(--border);
+  padding: 8px var(--gutter) calc(8px + env(safe-area-inset-bottom));
+  z-index: 10;
+}
+.tabbar-inner {
+  display: flex;
+  width: 100%;
+  max-width: var(--maxw);
+  gap: 4px;
+}
+.tabbar-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 50px;
+  padding: 6px 4px;
+  border-radius: 14px;
+  color: var(--ink-72);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.tabbar-item[aria-current="page"] {
+  background: var(--sun);
+  color: var(--ink);
+}
+.tabbar-label {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.66rem;
+  line-height: 1;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
   .pill:hover { transform: none; }

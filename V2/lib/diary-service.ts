@@ -108,6 +108,9 @@ export interface Account {
   id: string;
   name: string;
   email: string;
+  /** ISO date the account was first created. Absent on accounts that existed
+   *  before this field was added — never backfilled, so its absence is honest. */
+  createdAt?: string;
 }
 
 /** Binds an Account to a Diary with a role. Roles are per-diary, never global. */
@@ -128,6 +131,8 @@ const MEMBERSHIPS_KEY = "pouncity_memberships_v1";
 const NUDGE_KEY = "pouncity_nudge_dismissed_v1";
 const FEED_REMINDERS_KEY = "pouncity_feed_reminders_v1"; // { [diaryId]: boolean }
 const GROOM_REMINDER_KEY = "pouncity_groom_reminder_v1";
+const CIRCLE_KEY = "pouncity_circle_v1"; // { [accountId]: CareProvider[] }
+const CARE_REQUESTS_KEY = "pouncity_care_requests_v1"; // { [accountId]: CareRequest[] }
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -254,6 +259,7 @@ export function signIn(email: string): Account {
     id: "a_" + Math.random().toString(36).slice(2, 9),
     name: "",
     email: clean,
+    createdAt: new Date().toISOString(),
   };
   accounts[account.id] = account;
   write(ACCOUNTS_KEY, accounts);
@@ -861,6 +867,255 @@ export function isNudgeDismissed(): boolean {
 
 export function setNudgeDismissed(dismissed: boolean): void {
   write(NUDGE_KEY, dismissed);
+}
+
+/* ---- find care: your circle + a verified-sitters directory -------------- */
+
+export type ProviderKind = "circle" | "verified";
+
+/** One entry in Find care — either someone in the signed-in account's own
+ *  circle, or a listing from the verified-sitters directory. */
+export interface CareProvider {
+  id: string;
+  name: string;
+  kind: ProviderKind;
+  relation: string;
+  meta: string;
+  blurb: string;
+  /** 0 = no reviews yet. */
+  rating: number;
+  reviewCount: number;
+  /** null = no cost (a circle contact isn't paid through the app). */
+  price: string | null;
+  verified: boolean;
+}
+
+export interface CareReview {
+  who: string;
+  stars: number;
+  when: string;
+  text: string;
+}
+
+export interface CareRequest {
+  id: string;
+  providerId: string;
+  providerName: string;
+  when: string;
+  notes: string;
+  createdAt: string;
+}
+
+/**
+ * There is no real sitter onboarding yet, so the verified directory is a
+ * small, static set of example listings — never presented as real people or
+ * real reviews (same honesty rule as the DEMO-marked caregiving pets in
+ * slice 05). Screens must label these "Example listing".
+ */
+const VERIFIED_SITTERS: CareProvider[] = [
+  {
+    id: "neha",
+    name: "Neha Verma",
+    kind: "verified",
+    relation: "Verified pet sitter",
+    meta: "1.2 km away · responds in ~20 min",
+    blurb: "5 years boarding dogs from her home. Fenced yard, no other pets during your stay.",
+    rating: 4.9,
+    reviewCount: 32,
+    price: "₹650/night",
+    verified: true,
+  },
+  {
+    id: "pawsitive",
+    name: "The Pawsitive House",
+    kind: "verified",
+    relation: "Boarding facility",
+    meta: "2.8 km away · HSR Layout",
+    blurb: "Licensed facility with CCTV in common areas and a resident vet on call.",
+    rating: 4.6,
+    reviewCount: 18,
+    price: "₹900/night",
+    verified: true,
+  },
+  {
+    id: "farhan",
+    name: "Farhan S.",
+    kind: "verified",
+    relation: "Verified sitter · walks & overnight",
+    meta: "0.9 km away · responds in ~1 hr",
+    blurb: "Newer on Pouncity but background-checked and well reviewed elsewhere.",
+    rating: 5.0,
+    reviewCount: 6,
+    price: "₹500/night",
+    verified: true,
+  },
+];
+
+const CARE_REVIEWS: Record<string, CareReview[]> = {
+  neha: [
+    { who: "Aditi R.", stars: 5, when: "2 weeks ago", text: "Sent photos every evening without me asking. Would book again." },
+    { who: "Sam K.", stars: 5, when: "1 month ago", text: "Our cat is skittish with strangers — Neha was patient and gave a full update after." },
+    { who: "Priyanka M.", stars: 4, when: "2 months ago", text: "Great care, pickup timing was a little off." },
+  ],
+  pawsitive: [
+    { who: "Ronit D.", stars: 5, when: "3 weeks ago", text: "The CCTV access genuinely helped — checked in on my dog from the airport." },
+    { who: "Meher V.", stars: 4, when: "1 month ago", text: "Clean, professional, a bit pricier than a home sitter." },
+  ],
+  farhan: [
+    { who: "Dev A.", stars: 5, when: "1 week ago", text: "Took my Husky on real runs, not just short walks. Very reliable." },
+  ],
+};
+
+function readCircleMap(): Record<string, CareProvider[]> {
+  return read<Record<string, CareProvider[]>>(CIRCLE_KEY) ?? {};
+}
+
+/** The signed-in account's trusted circle. Empty until they add someone —
+ *  unlike the verified directory this is real data, never seeded. */
+export function getCircle(): CareProvider[] {
+  const acct = getAccount();
+  if (!acct) return [];
+  return readCircleMap()[acct.id] ?? [];
+}
+
+export function addCircleContact(input: {
+  name: string;
+  relation: string;
+  phone?: string;
+}): CareProvider | null {
+  const acct = getAccount();
+  if (!acct) return null;
+  const contact: CareProvider = {
+    id: "c_" + Math.random().toString(36).slice(2, 9),
+    name: input.name,
+    kind: "circle",
+    relation: input.relation,
+    meta: input.phone || "In your circle",
+    blurb: "",
+    rating: 0,
+    reviewCount: 0,
+    price: null,
+    verified: false,
+  };
+  const all = readCircleMap();
+  all[acct.id] = [contact, ...(all[acct.id] ?? [])];
+  write(CIRCLE_KEY, all);
+  return contact;
+}
+
+/** Everything Find care can show: the signed-in account's circle first, then
+ *  the verified directory. */
+export function findCareList(): CareProvider[] {
+  return [...getCircle(), ...VERIFIED_SITTERS];
+}
+
+/** One provider by id, from either the circle or the verified directory. */
+export function getCareProvider(id: string): CareProvider | null {
+  return findCareList().find((p) => p.id === id) ?? null;
+}
+
+export function careReviews(providerId: string): CareReview[] {
+  return CARE_REVIEWS[providerId] ?? [];
+}
+
+function readRequestsMap(): Record<string, CareRequest[]> {
+  return read<Record<string, CareRequest[]>>(CARE_REQUESTS_KEY) ?? {};
+}
+
+/** The signed-in account's own sent requests. */
+export function careRequests(): CareRequest[] {
+  const acct = getAccount();
+  if (!acct) return [];
+  return readRequestsMap()[acct.id] ?? [];
+}
+
+export function hasRequestedCare(providerId: string): boolean {
+  return careRequests().some((r) => r.providerId === providerId);
+}
+
+/**
+ * Record that the signed-in account asked a provider for care. Idempotent —
+ * re-asking the same provider returns the existing request rather than
+ * duplicating it (mirrors joinAsCaregiver's no-duplicate rule). There is no
+ * real other side to accept/decline yet, so this never fabricates a
+ * confirmed state — it only ever records that the ask was sent.
+ */
+export function requestCare(
+  provider: CareProvider,
+  when: string,
+  notes: string
+): CareRequest | null {
+  const acct = getAccount();
+  if (!acct) return null;
+  const existing = careRequests().find((r) => r.providerId === provider.id);
+  if (existing) return existing;
+  const req: CareRequest = {
+    id: "req_" + Math.random().toString(36).slice(2, 9),
+    providerId: provider.id,
+    providerName: provider.name,
+    when,
+    notes,
+    createdAt: new Date().toISOString(),
+  };
+  const all = readRequestsMap();
+  all[acct.id] = [req, ...(all[acct.id] ?? [])];
+  write(CARE_REQUESTS_KEY, all);
+  return req;
+}
+
+/* ---- sitter profile: a draft listing, honestly not yet publishable ------ */
+
+export interface SitterListing {
+  bio: string;
+  priceLabel: string;
+  petTypes: string[];
+  availability: ("open" | "booked")[]; // 7 entries, Mon–Sun
+  updatedAt: string;
+}
+
+const SITTER_KEY = "pouncity_sitter_listing_v1"; // { [accountId]: SitterListing }
+
+function readSitterMap(): Record<string, SitterListing> {
+  return read<Record<string, SitterListing>>(SITTER_KEY) ?? {};
+}
+
+/** The signed-in account's own draft sitter listing, or null if never saved. */
+export function getSitterListing(): SitterListing | null {
+  const acct = getAccount();
+  if (!acct) return null;
+  return readSitterMap()[acct.id] ?? null;
+}
+
+/**
+ * Save a draft listing. There is no real ID/background-check verification
+ * behind this yet, so it is never "published" into the Find care directory —
+ * the screen that calls this must keep saying so, not imply the listing is
+ * live.
+ */
+export function saveSitterListing(fields: {
+  bio: string;
+  priceLabel: string;
+  petTypes: string[];
+  availability: ("open" | "booked")[];
+}): SitterListing | null {
+  const acct = getAccount();
+  if (!acct) return null;
+  const listing: SitterListing = { ...fields, updatedAt: new Date().toISOString() };
+  const all = readSitterMap();
+  all[acct.id] = listing;
+  write(SITTER_KEY, all);
+  return listing;
+}
+
+export function circleStatus(): HubCardStatus {
+  const n = getCircle().length;
+  return n === 0
+    ? { label: "Empty", tone: "empty" }
+    : { label: `${n} ${n === 1 ? "person" : "people"}`, tone: "ready" };
+}
+
+export function findCareStatus(): HubCardStatus {
+  return { label: `${VERIFIED_SITTERS.length} nearby`, tone: "ready" };
 }
 
 /* ---- derived view helpers (kept here so screens stay declarative) -------- */

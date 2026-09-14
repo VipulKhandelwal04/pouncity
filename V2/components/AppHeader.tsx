@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Wordmark } from "./Wordmark";
 import { signOut, type Account } from "@/lib/diary-service";
 
@@ -29,7 +30,8 @@ export function AppHeader({ account }: { account: Account | null }) {
       <Wordmark />
       {account ? (
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <span
+          <Link
+            href="/profile"
             style={{
               display: "flex",
               flexDirection: "column",
@@ -37,7 +39,7 @@ export function AppHeader({ account }: { account: Account | null }) {
               minWidth: 0,
               lineHeight: 1.2,
             }}
-            title={account.email}
+            title={`${account.email} — view profile`}
           >
             {account.name && (
               <span
@@ -67,7 +69,7 @@ export function AppHeader({ account }: { account: Account | null }) {
             >
               {account.email}
             </span>
-          </span>
+          </Link>
           <button
             type="button"
             onClick={handleSignOut}

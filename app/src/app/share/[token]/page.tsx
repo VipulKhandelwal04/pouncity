@@ -54,6 +54,13 @@ export default async function SharedPassportPage({
           </>
         )}
       </dl>
+
+      <p>
+        Want to help track feeding or get reminders for {passport.name}?{" "}
+        <a href={`/login?redirectTo=${encodeURIComponent(`/share/${token}/join`)}`}>
+          Sign in or sign up
+        </a>
+      </p>
     </main>
   );
 }

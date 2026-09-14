@@ -3,7 +3,7 @@ import type { Passport } from "./passport";
 import type { PassportRepository } from "./passport-repository";
 import type { PassportShareRepository } from "./passport-share-repository";
 
-interface PassportRow {
+export interface PassportRow {
   id: string;
   owner_id: string;
   name: string;
@@ -20,7 +20,7 @@ interface PassportRow {
   share_token: string | null;
 }
 
-function toPassport(row: PassportRow): Passport {
+export function toPassport(row: PassportRow): Passport {
   return {
     id: row.id,
     ownerId: row.owner_id,

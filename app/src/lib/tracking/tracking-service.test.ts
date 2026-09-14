@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { createPassport } from "../passport/passport-service";
 import type { PassportRepository } from "../passport/passport-repository";
+import type { PassportAccessRepository } from "../passport/passport-access-repository";
 import type { Passport } from "../passport/passport";
 import { confirmFedToday, getTrackingHistory } from "./tracking-service";
 import type { TrackingRepository } from "./tracking-repository";
 import type { TrackingEntry } from "./tracking-entry";
 
-class InMemoryPassportRepository implements PassportRepository {
+class InMemoryPassportRepository implements PassportRepository, PassportAccessRepository {
   private passports = new Map<string, Passport>();
+  private caregivers = new Map<string, string>(); // caregiverUserId -> passportId
 
   async insert(passport: Passport): Promise<Passport> {
     this.passports.set(passport.id, passport);
@@ -27,6 +29,19 @@ class InMemoryPassportRepository implements PassportRepository {
     const updated = { ...existing, ...updates };
     this.passports.set(id, updated);
     return updated;
+  }
+
+  /** Test-only helper — real caregiver joining is exercised in join-as-caregiver.test.ts. */
+  addCaregiver(userId: string, passportId: string) {
+    this.caregivers.set(userId, passportId);
+  }
+
+  async findAccessiblePassportForUser(userId: string): Promise<Passport | null> {
+    const owned = await this.findByOwnerId(userId);
+    if (owned) return owned;
+
+    const caregiverPassportId = this.caregivers.get(userId);
+    return caregiverPassportId ? (this.passports.get(caregiverPassportId) ?? null) : null;
   }
 }
 
@@ -168,6 +183,25 @@ describe("confirmFedToday", () => {
 
     const history = await getTrackingHistory("owner-1", passportRepo, trackingRepo);
     expect(history).toHaveLength(2);
+  });
+
+  it("lets a caregiver (not the owner) confirm feeding on the same passport", async () => {
+    const passportRepo = new InMemoryPassportRepository();
+    const trackingRepo = new InMemoryTrackingRepository();
+    const passport = await createPassport(createPassportInput, "owner-1", passportRepo);
+    passportRepo.addCaregiver("caregiver-1", passport.id);
+
+    const entry = await confirmFedToday(
+      "caregiver-1",
+      "2026-03-01",
+      undefined,
+      passportRepo,
+      trackingRepo,
+    );
+
+    expect(entry.passportId).toBe(passport.id);
+    const history = await getTrackingHistory("owner-1", passportRepo, trackingRepo);
+    expect(history).toHaveLength(1);
   });
 
   it("rejects confirmation when the owner has no passport yet", async () => {

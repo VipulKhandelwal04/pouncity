@@ -1,14 +1,12 @@
-import { z } from "zod";
 import type { PassportShareRepository } from "./passport-share-repository";
+import { shareTokenSchema } from "./share-token-schema";
 import { toSharedPassportView, type SharedPassportView } from "./shared-passport-view";
-
-const tokenSchema = z.string().trim().min(1);
 
 export async function getPassportByShareToken(
   tokenInput: unknown,
   shareRepo: PassportShareRepository,
 ): Promise<SharedPassportView | null> {
-  const parsed = tokenSchema.safeParse(tokenInput);
+  const parsed = shareTokenSchema.safeParse(tokenInput);
   if (!parsed.success) return null;
 
   const passport = await shareRepo.findByShareToken(parsed.data);

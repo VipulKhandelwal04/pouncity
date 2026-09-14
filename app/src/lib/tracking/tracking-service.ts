@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { PassportRepository } from "../passport/passport-repository";
+import type { PassportAccessRepository } from "../passport/passport-access-repository";
 import type { TrackingEntry } from "./tracking-entry";
 import type { TrackingRepository } from "./tracking-repository";
 
@@ -22,18 +22,18 @@ const noteSchema = z.preprocess((value) => {
 }, z.string().min(1).optional());
 
 export async function confirmFedToday(
-  ownerId: string,
+  userId: string,
   dateInput: unknown,
   noteInput: unknown,
-  passportRepo: PassportRepository,
+  passportAccessRepo: PassportAccessRepository,
   trackingRepo: TrackingRepository,
 ): Promise<TrackingEntry> {
   const date = dateSchema.parse(dateInput);
   const note = noteSchema.parse(noteInput);
 
-  const passport = await passportRepo.findByOwnerId(ownerId);
+  const passport = await passportAccessRepo.findAccessiblePassportForUser(userId);
   if (!passport) {
-    throw new Error(`No passport found for owner ${ownerId}`);
+    throw new Error(`No accessible passport found for user ${userId}`);
   }
 
   const existing = await trackingRepo.findByPassportIdAndDate(passport.id, date);
@@ -50,11 +50,11 @@ export async function confirmFedToday(
 }
 
 export async function getTrackingHistory(
-  ownerId: string,
-  passportRepo: PassportRepository,
+  userId: string,
+  passportAccessRepo: PassportAccessRepository,
   trackingRepo: TrackingRepository,
 ): Promise<TrackingEntry[]> {
-  const passport = await passportRepo.findByOwnerId(ownerId);
+  const passport = await passportAccessRepo.findAccessiblePassportForUser(userId);
   if (!passport) return [];
 
   return trackingRepo.findByPassportId(passport.id);

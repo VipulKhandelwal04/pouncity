@@ -17,3 +17,7 @@ export function supabaseServiceRoleKey(): string {
 export function cronSecret(): string {
   return requireEnv("CRON_SECRET");
 }
+
+export function analyticsSecret(): string {
+  return requireEnv("ANALYTICS_SECRET");
+}

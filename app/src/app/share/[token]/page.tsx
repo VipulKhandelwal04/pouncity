@@ -23,6 +23,16 @@ export default async function SharedPassportPage({
     notFound();
   }
 
+  // Server-side RPC (SECURITY DEFINER) rather than a table insert — this
+  // caller is unauthenticated, so it re-validates the token itself rather
+  // than trusting the lookup already done above. Best-effort: a
+  // view-tracking failure shouldn't break the page for the actual viewer.
+  try {
+    await supabase.rpc("record_handover_opened", { p_token: token });
+  } catch {
+    // Non-fatal — see above.
+  }
+
   return (
     <main>
       <p>Shared with you — view only.</p>

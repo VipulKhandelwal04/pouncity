@@ -15,6 +15,7 @@ import { GroomingSection } from "./grooming-section";
 import { HandoverSection } from "./handover-section";
 import { PushNotificationSection } from "./push-notification-section";
 import { vapidPublicKey } from "@/lib/reminders/env";
+import { SupabaseAnalyticsEventRepository } from "@/lib/analytics/supabase-analytics-event-repository";
 
 export default async function PassportPage() {
   const { supabase, user } = await requireUser();
@@ -42,6 +43,18 @@ export default async function PassportPage() {
     trackingRepo.findByPassportId(passport.id),
     groomingRepo.findByPassportId(passport.id),
   ]);
+
+  if (dietPlan) {
+    // Awaited (not fire-and-forget) since a serverless function can
+    // terminate right after the response is sent, which would silently
+    // drop an unawaited write. Failure is swallowed either way — a
+    // view-tracking hiccup shouldn't break the page. Counts server-renders
+    // of this page while a plan exists — not deduplicated per
+    // session/prefetch, a known pilot-scope simplification (see SETUP.md).
+    await new SupabaseAnalyticsEventRepository(supabase)
+      .record(passport.id, "diet_plan_viewed")
+      .catch(() => {});
+  }
 
   return (
     <main>

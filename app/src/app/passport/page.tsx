@@ -5,8 +5,11 @@ import { SupabasePassportRepository } from "@/lib/passport/supabase-passport-rep
 import { getPassportForOwner } from "@/lib/passport/passport-service";
 import { passportCompleteness } from "@/lib/passport/passport-completeness";
 import { SupabaseDietPlanRepository } from "@/lib/diet/supabase-diet-plan-repository";
+import { SupabaseTrackingRepository } from "@/lib/tracking/supabase-tracking-repository";
+import { todayDateString } from "@/lib/tracking/today";
 import { CompleteProfileForm } from "./complete-profile-form";
 import { DietPlanSection } from "./diet-plan-section";
+import { TrackingSection } from "./tracking-section";
 
 export default async function PassportPage() {
   const { supabase, user } = await requireUser();
@@ -24,6 +27,12 @@ export default async function PassportPage() {
   // passport by owner internally).
   const dietRepo = new SupabaseDietPlanRepository(supabase);
   const dietPlan = await dietRepo.findByPassportId(passport.id);
+
+  const trackingRepo = new SupabaseTrackingRepository(supabase);
+  const [todayEntry, trackingHistory] = await Promise.all([
+    trackingRepo.findByPassportIdAndDate(passport.id, todayDateString()),
+    trackingRepo.findByPassportId(passport.id),
+  ]);
 
   return (
     <main>
@@ -59,6 +68,8 @@ export default async function PassportPage() {
       <CompleteProfileForm passport={passport} completeness={completeness} />
 
       <DietPlanSection plan={dietPlan} />
+
+      <TrackingSection todayEntry={todayEntry} history={trackingHistory} />
     </main>
   );
 }

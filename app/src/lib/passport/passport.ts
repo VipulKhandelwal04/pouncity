@@ -10,4 +10,16 @@ export interface Passport {
   weightKg: number;
   photoUrl: string;
   createdAt: string;
+  quirks: string | null;
+  vetName: string | null;
+  vetPhone: string | null;
+  vetClinic: string | null;
 }
+
+/** The optional passport fields tracked by the "complete your passport" nudge. */
+export const OPTIONAL_PASSPORT_FIELDS = [
+  "quirks",
+  "vetName",
+  "vetPhone",
+  "vetClinic",
+] as const;

@@ -15,6 +15,10 @@ export async function createPassport(
     ownerId,
     ...validated,
     createdAt: new Date().toISOString(),
+    quirks: null,
+    vetName: null,
+    vetPhone: null,
+    vetClinic: null,
   };
 
   return repo.insert(passport);

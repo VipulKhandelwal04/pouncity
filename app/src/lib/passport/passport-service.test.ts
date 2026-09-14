@@ -17,6 +17,14 @@ class InMemoryPassportRepository implements PassportRepository {
     }
     return null;
   }
+
+  async update(id: string, updates: Partial<Passport>): Promise<Passport> {
+    const existing = this.passports.get(id);
+    if (!existing) throw new Error("Not found");
+    const updated = { ...existing, ...updates };
+    this.passports.set(id, updated);
+    return updated;
+  }
 }
 
 const validInput = {

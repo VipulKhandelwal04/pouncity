@@ -2,17 +2,8 @@
 
 import { useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { isNextRedirectError } from "@/lib/next-redirect";
 import { createPassportAction } from "../actions";
-
-function isNextRedirectError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "digest" in error &&
-    typeof (error as { digest: unknown }).digest === "string" &&
-    (error as { digest: string }).digest.startsWith("NEXT_REDIRECT")
-  );
-}
 
 export function PassportForm() {
   const [uploading, setUploading] = useState(false);

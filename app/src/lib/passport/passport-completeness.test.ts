@@ -16,6 +16,7 @@ const basePassport: Passport = {
   vetName: null,
   vetPhone: null,
   vetClinic: null,
+  shareToken: null,
 };
 
 describe("passportCompleteness", () => {

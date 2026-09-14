@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Passport } from "./passport";
 import type { PassportRepository } from "./passport-repository";
+import type { PassportShareRepository } from "./passport-share-repository";
 
 interface PassportRow {
   id: string;
@@ -16,6 +17,7 @@ interface PassportRow {
   vet_name: string | null;
   vet_phone: string | null;
   vet_clinic: string | null;
+  share_token: string | null;
 }
 
 function toPassport(row: PassportRow): Passport {
@@ -33,6 +35,7 @@ function toPassport(row: PassportRow): Passport {
     vetName: row.vet_name,
     vetPhone: row.vet_phone,
     vetClinic: row.vet_clinic,
+    shareToken: row.share_token,
   };
 }
 
@@ -48,10 +51,13 @@ function toRow(updates: Partial<Passport>): Partial<PassportRow> {
   if (updates.vetName !== undefined) row.vet_name = updates.vetName;
   if (updates.vetPhone !== undefined) row.vet_phone = updates.vetPhone;
   if (updates.vetClinic !== undefined) row.vet_clinic = updates.vetClinic;
+  if (updates.shareToken !== undefined) row.share_token = updates.shareToken;
   return row;
 }
 
-export class SupabasePassportRepository implements PassportRepository {
+export class SupabasePassportRepository
+  implements PassportRepository, PassportShareRepository
+{
   constructor(private readonly client: SupabaseClient) {}
 
   async insert(passport: Passport): Promise<Passport> {
@@ -93,6 +99,19 @@ export class SupabasePassportRepository implements PassportRepository {
       .single();
 
     if (error) throw error;
+    return toPassport(data as PassportRow);
+  }
+
+  async findByShareToken(token: string): Promise<Passport | null> {
+    // A plain table select would be blocked by RLS for an unauthenticated
+    // caller (correctly — there's no "anyone can read by token" policy on
+    // the table itself). This RPC is the deliberate, narrow exception.
+    const { data, error } = await this.client.rpc("get_passport_by_share_token", {
+      p_token: token,
+    });
+
+    if (error) throw error;
+    if (!data) return null;
     return toPassport(data as PassportRow);
   }
 }

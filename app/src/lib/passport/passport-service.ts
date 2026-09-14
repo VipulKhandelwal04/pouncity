@@ -19,6 +19,7 @@ export async function createPassport(
     vetName: null,
     vetPhone: null,
     vetClinic: null,
+    shareToken: null,
   };
 
   return repo.insert(passport);

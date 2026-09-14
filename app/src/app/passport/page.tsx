@@ -12,6 +12,7 @@ import { CompleteProfileForm } from "./complete-profile-form";
 import { DietPlanSection } from "./diet-plan-section";
 import { TrackingSection } from "./tracking-section";
 import { GroomingSection } from "./grooming-section";
+import { HandoverSection } from "./handover-section";
 
 export default async function PassportPage() {
   const { supabase, user } = await requireUser();
@@ -78,6 +79,8 @@ export default async function PassportPage() {
       <TrackingSection todayEntry={todayEntry} history={trackingHistory} />
 
       <GroomingSection guide={groomingGuide} />
+
+      <HandoverSection shareToken={passport.shareToken} />
     </main>
   );
 }

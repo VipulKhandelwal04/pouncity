@@ -5,6 +5,8 @@ import { SupabasePassportAccessRepository } from "@/lib/passport/supabase-passpo
 import { SupabaseTrackingRepository } from "@/lib/tracking/supabase-tracking-repository";
 import { todayDateString } from "@/lib/tracking/today";
 import { TrackingSection } from "@/app/passport/tracking-section";
+import { PushNotificationSection } from "@/app/passport/push-notification-section";
+import { vapidPublicKey } from "@/lib/reminders/env";
 
 export default async function CaregiverPassportPage({
   params,
@@ -60,6 +62,8 @@ export default async function CaregiverPassportPage({
       </dl>
 
       <TrackingSection todayEntry={todayEntry} history={trackingHistory} />
+
+      <PushNotificationSection vapidPublicKey={vapidPublicKey()} />
     </main>
   );
 }

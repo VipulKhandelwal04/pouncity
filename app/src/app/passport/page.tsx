@@ -13,6 +13,8 @@ import { DietPlanSection } from "./diet-plan-section";
 import { TrackingSection } from "./tracking-section";
 import { GroomingSection } from "./grooming-section";
 import { HandoverSection } from "./handover-section";
+import { PushNotificationSection } from "./push-notification-section";
+import { vapidPublicKey } from "@/lib/reminders/env";
 
 export default async function PassportPage() {
   const { supabase, user } = await requireUser();
@@ -81,6 +83,8 @@ export default async function PassportPage() {
       <GroomingSection guide={groomingGuide} />
 
       <HandoverSection shareToken={passport.shareToken} />
+
+      <PushNotificationSection vapidPublicKey={vapidPublicKey()} />
     </main>
   );
 }

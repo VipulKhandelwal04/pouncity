@@ -1,6 +1,9 @@
-# Setup — Ticket 01 (Account creation + Passport creation)
+# Setup
 
-Status: code complete and live-verified against a real Supabase project.
+Status: Tickets 01–09 code complete and live-verified against a real
+Supabase project. This file was written for Ticket 01 and has setup notes
+for later tickets appended rather than being fully rewritten each time —
+see the bottom section for Ticket 09 (push notifications).
 
 ## 1. Supabase project
 
@@ -14,10 +17,16 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ```
 
 Copy `.env.local.example` to `.env.local` and fill in your project's URL
-and anon public key from **Project Settings → API**. Never put the
-`service_role` key in this file or anywhere in the repo — it bypasses RLS
-entirely and this app never needs it (all writes go through the anon key
-+ the signed-in user's own session).
+and anon public key from **Project Settings → API**.
+
+**On `service_role`**: as of Ticket 09, there is exactly one deliberate,
+scoped exception to "never use `service_role`" — the cron-triggered
+reminder sweep at `/api/cron/send-reminders`, which needs cross-user
+reads that RLS is specifically designed to block from a normal session.
+It's isolated to `src/lib/supabase/service-role-client.ts` (guarded by
+`server-only`) and that one route. Every other part of the app still goes
+through the anon key + the signed-in user's own session — do not reach
+for `service_role` anywhere else without the same level of justification.
 
 ## 2. Database migrations — already applied
 
@@ -72,3 +81,40 @@ to create a passport, then `/passport` to view it.
   → upload a photo → see the created passport) hasn't been run manually
   yet — everything underneath it has been verified piece by piece at the
   protocol level instead.
+
+## Ticket 09 — Web push notifications
+
+Needs three more env vars beyond the Ticket 01 pair, all in
+`.env.local.example`:
+
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — generate with
+  `npx web-push generate-vapid-keys`. The public key is safe to expose to
+  the client (it's sent to `pushManager.subscribe()`); the private key is
+  server-only.
+- `VAPID_SUBJECT` — a `mailto:` (or `https:`) contact URL, required by
+  the web push protocol so a push service can reach the app owner if
+  there's abuse. Currently set to the account owner's personal email as a
+  placeholder — swap for a dedicated support/contact address before
+  relying on this beyond the pilot.
+- `SUPABASE_SERVICE_ROLE_KEY` — from **Project Settings → API →
+  service_role**. Used only by `/api/cron/send-reminders` (see the
+  `service_role` note above).
+- `CRON_SECRET` — a random shared secret the cron route checks via a
+  `Bearer` header. Generate with
+  `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
+
+**The reminder-sending schedule is not wired up.** The sweep logic
+(`runReminderSweep`) and the route that exposes it exist and are
+live-testable by hand (`curl -X POST .../api/cron/send-reminders -H
+"Authorization: Bearer $CRON_SECRET"`), but nothing calls it
+automatically — this app isn't deployed anywhere yet, so there's no
+Vercel Cron (or equivalent) configured. Once deployed, add a scheduled
+trigger (e.g. `vercel.json`'s `crons` field) pointing at that route with
+the secret in its `Authorization` header.
+
+Live-verified: `push_subscriptions` table + RLS,
+`join_passport_as_caregiver`-adjacent RLS unaffected, opt-in/opt-out
+server actions. Not yet live-verified: an actual push notification
+arriving on a real device (needs a subscribed browser, which this
+environment can't provide), and the sweep's DB queries against real
+multi-passport data (unit-tested against fakes only so far).

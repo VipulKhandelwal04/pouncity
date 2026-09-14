@@ -111,7 +111,16 @@ export class SupabasePassportRepository
     });
 
     if (error) throw error;
-    if (!data) return null;
-    return toPassport(data as PassportRow);
+
+    // For a SQL-language function whose return type is a single composite
+    // row (not SETOF), Postgres represents "the query matched zero rows"
+    // as a row where every field is null — not SQL/JSON null itself.
+    // PostgREST serializes that as a truthy object like
+    // { id: null, owner_id: null, ... }, so `!data` never catches a
+    // non-matching token; checking the row's own primary key does.
+    const row = data as PassportRow | null;
+    if (!row || row.id === null) return null;
+
+    return toPassport(row);
   }
 }

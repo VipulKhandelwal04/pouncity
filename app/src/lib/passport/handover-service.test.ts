@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createPassport } from "./passport-service";
 import { generateHandoverLink } from "./generate-handover-link";
+import { revokeHandoverLink } from "./revoke-handover-link";
 import { getPassportByShareToken } from "./get-passport-by-share-token";
 import type { PassportRepository } from "./passport-repository";
 import type { PassportShareRepository } from "./passport-share-repository";
@@ -83,6 +84,56 @@ describe("generateHandoverLink", () => {
     const repo = new InMemoryPassportRepository();
 
     await expect(generateHandoverLink("owner-with-no-passport", repo)).rejects.toThrow();
+  });
+});
+
+describe("revokeHandoverLink", () => {
+  it("clears the share token so the old link no longer resolves", async () => {
+    const repo = new InMemoryPassportRepository();
+    await createPassport(createPassportInput, "owner-1", repo);
+    const token = await generateHandoverLink("owner-1", repo);
+    expect(await getPassportByShareToken(token, repo)).not.toBeNull();
+
+    await revokeHandoverLink("owner-1", repo);
+
+    expect(await getPassportByShareToken(token, repo)).toBeNull();
+  });
+
+  it("leaves the passport revoked (no shareToken) after revoking", async () => {
+    const repo = new InMemoryPassportRepository();
+    const passport = await createPassport(createPassportInput, "owner-1", repo);
+    await generateHandoverLink("owner-1", repo);
+
+    await revokeHandoverLink("owner-1", repo);
+
+    const found = await repo.findByOwnerId("owner-1");
+    expect(found?.id).toBe(passport.id);
+    expect(found?.shareToken).toBeNull();
+  });
+
+  it("is safe to call when there is no active link", async () => {
+    const repo = new InMemoryPassportRepository();
+    await createPassport(createPassportInput, "owner-1", repo);
+
+    await expect(revokeHandoverLink("owner-1", repo)).resolves.not.toThrow();
+  });
+
+  it("rejects revocation when the owner has no passport at all", async () => {
+    const repo = new InMemoryPassportRepository();
+
+    await expect(revokeHandoverLink("owner-with-no-passport", repo)).rejects.toThrow();
+  });
+
+  it("owner can generate a fresh link after revoking the old one", async () => {
+    const repo = new InMemoryPassportRepository();
+    await createPassport(createPassportInput, "owner-1", repo);
+    const firstToken = await generateHandoverLink("owner-1", repo);
+    await revokeHandoverLink("owner-1", repo);
+
+    const newToken = await generateHandoverLink("owner-1", repo);
+
+    expect(newToken).not.toBe(firstToken);
+    expect(await getPassportByShareToken(newToken, repo)).not.toBeNull();
   });
 });
 

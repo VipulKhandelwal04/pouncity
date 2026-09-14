@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { findOwnedPassportOrThrow } from "./find-owned-passport-or-throw";
 import type { PassportRepository } from "./passport-repository";
 
 function generateToken(): string {
@@ -17,10 +18,7 @@ export async function generateHandoverLink(
   ownerId: string,
   passportRepo: PassportRepository,
 ): Promise<string> {
-  const passport = await passportRepo.findByOwnerId(ownerId);
-  if (!passport) {
-    throw new Error(`No passport found for owner ${ownerId}`);
-  }
+  const passport = await findOwnedPassportOrThrow(ownerId, passportRepo);
 
   const token = generateToken();
   await passportRepo.update(passport.id, { shareToken: token });

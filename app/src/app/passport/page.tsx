@@ -4,7 +4,9 @@ import { requireUser } from "@/lib/supabase/require-user";
 import { SupabasePassportRepository } from "@/lib/passport/supabase-passport-repository";
 import { getPassportForOwner } from "@/lib/passport/passport-service";
 import { passportCompleteness } from "@/lib/passport/passport-completeness";
+import { SupabaseDietPlanRepository } from "@/lib/diet/supabase-diet-plan-repository";
 import { CompleteProfileForm } from "./complete-profile-form";
+import { DietPlanSection } from "./diet-plan-section";
 
 export default async function PassportPage() {
   const { supabase, user } = await requireUser();
@@ -17,6 +19,11 @@ export default async function PassportPage() {
   }
 
   const completeness = passportCompleteness(passport);
+  // Already holding the passport, so look up its plan directly rather than
+  // going through getDietPlanForPassport (which would re-fetch the
+  // passport by owner internally).
+  const dietRepo = new SupabaseDietPlanRepository(supabase);
+  const dietPlan = await dietRepo.findByPassportId(passport.id);
 
   return (
     <main>
@@ -50,6 +57,8 @@ export default async function PassportPage() {
       </dl>
 
       <CompleteProfileForm passport={passport} completeness={completeness} />
+
+      <DietPlanSection plan={dietPlan} />
     </main>
   );
 }

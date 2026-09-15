@@ -30,7 +30,7 @@ export function Disclaimer({ petName }: { petName: string }) {
         <circle cx="12" cy="7.6" r="1.3" fill="var(--ink)" />
       </svg>
       <p style={{ fontSize: "0.82rem", color: "var(--ink-72)", lineHeight: 1.5 }}>
-        General guidance from public sources —{" "}
+        General guidance from public sources,{" "}
         <strong style={{ color: "var(--coral-text)" }}>not veterinary advice</strong>. For
         anything about {petName}&rsquo;s health, check with your vet.
       </p>

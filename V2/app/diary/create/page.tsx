@@ -47,7 +47,7 @@ export default function CreatePage() {
         Start your pet&rsquo;s diary
       </h1>
       <p style={{ textAlign: "center", color: "var(--ink-72)", marginBottom: 26 }}>
-        Just the basics now — quirks, vet and plans can come later.
+        Just the basics now: quirks, vet and plans can come later.
       </p>
       <DiaryForm mode="create" />
     </main>

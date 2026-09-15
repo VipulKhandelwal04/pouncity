@@ -96,7 +96,7 @@ export default function DietPage() {
       {step === "intro" && (
         <div style={{ display: "grid", gap: 18 }}>
           <p style={{ color: "var(--ink-72)", lineHeight: 1.55 }}>
-            A simple daily feeding guide for {diary.name} — what to feed and how much. Write it
+            A simple daily feeding guide for {diary.name}: what to feed and how much. Write it
             in yourself, or let Pouncity draft one from breed, age and weight.
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -119,7 +119,7 @@ export default function DietPage() {
               rows={2}
               value={mOverview}
               onChange={(e) => setMOverview(e.target.value)}
-              placeholder={`A line about ${diary.name}'s feeding — e.g. Measured by weight, twice a day.`}
+              placeholder={`A line about ${diary.name}'s feeding, e.g. Measured by weight, twice a day.`}
               autoFocus
             />
           </Field>
@@ -150,7 +150,7 @@ export default function DietPage() {
                 setMMeals(e.target.value);
                 setMErr(null);
               }}
-              placeholder="e.g. 2 meals — morning and evening"
+              placeholder="e.g. 2 meals, morning and evening"
             />
           </Field>
           <Field label="Notes (optional, one per line)">
@@ -221,7 +221,7 @@ export default function DietPage() {
       {step === "error" && (
         <div style={{ display: "grid", gap: 16 }}>
           <div className="card" style={{ borderStyle: "dashed" }}>
-            <p>That didn&rsquo;t save. It&rsquo;s not you — head back and give it another go.</p>
+            <p>That didn&rsquo;t save. It&rsquo;s not you. Head back and give it another go.</p>
           </div>
           <button
             className="pill"

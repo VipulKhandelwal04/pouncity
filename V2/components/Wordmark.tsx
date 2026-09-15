@@ -5,7 +5,7 @@ export function Wordmark({ className }: { className?: string }) {
     <Link
       href="/diary"
       className={`wordmark ${className ?? ""}`.trim()}
-      aria-label="Pouncity — go to home"
+      aria-label="Pouncity, go to home"
     >
       pouncity
       <span className="dot" aria-hidden="true">

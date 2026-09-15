@@ -117,6 +117,35 @@ export interface Membership {
   role: Role;
 }
 
+/**
+ * A former Caregiver retained privately for the Owner (ADR-0006). Access ended
+ * when the Owner revoked the link; this is history, NOT a live Membership, so it
+ * grants no access to the Diary. Kept so the Owner can remember who helped and
+ * (ticket 07) keep a private Rating on them.
+ */
+export interface PastCaregiver {
+  accountId: string;
+  diaryId: string;
+  /** ISO timestamp when the Owner revoked the link that bound them. */
+  endedAt: string;
+}
+
+/**
+ * Private feedback an Owner keeps on a Caregiver (CONTEXT.md: Rating). Stars
+ * (1-5) plus an optional note, tied to (Owner, Caregiver, Diary). Visible ONLY
+ * to the Owner who wrote it — never to the Caregiver, never aggregated (ADR-0005)
+ * — and used to order/flag the Circle. One per (owner, caregiver, diary); it
+ * survives a revoke and re-share, so a past helper keeps their Rating.
+ */
+export interface Rating {
+  ownerAccountId: string;
+  caregiverAccountId: string;
+  diaryId: string;
+  stars: number;
+  note?: string;
+  updatedAt: string;
+}
+
 // Legacy single-diary keys — read once for migration, then removed.
 const DIARY_KEY = "pouncity_diary_v1";
 const SESSION_KEY = "pouncity_session_v1";
@@ -125,6 +154,8 @@ const ACCOUNTS_KEY = "pouncity_accounts_v1";
 const CURRENT_ACCOUNT_KEY = "pouncity_current_account_v1";
 const DIARIES_KEY = "pouncity_diaries_v1";
 const MEMBERSHIPS_KEY = "pouncity_memberships_v1";
+const PAST_CAREGIVERS_KEY = "pouncity_past_caregivers_v1"; // ADR-0006: retained on revoke
+const RATINGS_KEY = "pouncity_ratings_v1"; // private owner→caregiver feedback
 const NUDGE_KEY = "pouncity_nudge_dismissed_v1";
 const FEED_REMINDERS_KEY = "pouncity_feed_reminders_v1"; // { [diaryId]: boolean }
 const GROOM_REMINDER_KEY = "pouncity_groom_reminder_v1";
@@ -218,6 +249,14 @@ function readDiaries(): Record<string, Diary> {
 
 function readMemberships(): Membership[] {
   return read<Membership[]>(MEMBERSHIPS_KEY) ?? [];
+}
+
+function readPastCaregivers(): PastCaregiver[] {
+  return read<PastCaregiver[]>(PAST_CAREGIVERS_KEY) ?? [];
+}
+
+function readRatings(): Rating[] {
+  return read<Rating[]>(RATINGS_KEY) ?? [];
 }
 
 /** The single write path for a diary — keyed by id, so any diary can be persisted. */
@@ -472,9 +511,9 @@ export function generateDietPlan(diary: Diary, currentFood: string): DietPlan {
     currentFood: food,
     summary: `Keep ${diary.name} on ${food}, measured by weight rather than by eye.`,
     portionPerDay: `About ${grams} g of dry food a day`,
-    meals: young ? "3 smaller meals a day" : "2 meals — morning and evening",
+    meals: young ? "3 smaller meals a day" : "2 meals, morning and evening",
     tips: [
-      "Weigh portions with a kitchen scale — cups drift by a lot.",
+      "Weigh portions with a kitchen scale. Cups drift by a lot.",
       "If you add wet food, cut the dry amount to match.",
       "Keep treats under ~10% of the day's food.",
       `Re-check the amount whenever ${diary.name}'s weight changes.`,
@@ -532,17 +571,17 @@ export function generateGroomingGuide(diary: Diary, coatType: string): GroomingG
   const professional =
     diary.species === "cat"
       ? long
-        ? `Most cats self-groom, but a ${coat} mats easily — a professional groom about every ${freq} weeks helps.`
+        ? `Most cats self-groom, but a ${coat} mats easily, so a professional groom about every ${freq} weeks helps.`
         : "Cats mostly self-groom; a professional visit is only needed if the coat gets matted."
       : `A professional groom about every ${freq} weeks keeps the coat and nails in shape.`;
   return {
     createdAt: new Date().toISOString(),
     coatType: coat,
     frequencyWeeks: freq,
-    summary: `${diary.name}'s ${coat} does best with a steady rhythm — most of it you can do at home.`,
+    summary: `${diary.name}'s ${coat} does best with a steady rhythm, and most of it you can do at home.`,
     routine: [
       `Brush ${brushing} to stop mats and cut shedding.`,
-      "Bath every 4–6 weeks, or when actually dirty — over-washing dries the skin.",
+      "Bath every 4–6 weeks, or when actually dirty. Over-washing dries the skin.",
       "Trim nails every 3–4 weeks; a click on the floor means they're long.",
       "Check ears and teeth weekly.",
     ],
@@ -621,6 +660,38 @@ export function ensureHandoverLink(): Diary | null {
   return cur.handover.token ? cur : regenerateHandoverLink();
 }
 
+/** Whether a diary has the safety basics a Caregiver needs, and what is missing. */
+export interface HandoverReadiness {
+  ready: boolean;
+  /** Each gap names what to add and where the Owner fixes it. */
+  missing: { label: string; where: "edit" | "diet" }[];
+}
+
+/**
+ * Handover-readiness (ticket 06): the basics a Caregiver needs before a pet is
+ * handed over — the safety records AND a diet plan, so a sitter always has
+ * feeding guidance (option b, 2026-09-15). Reports which required pieces are
+ * still missing, each tagged with where the Owner fixes it, so the Circle can
+ * gate link creation, name the gaps, and link straight to the right page. These
+ * already exist on the Diary shape — validation + a completion prompt, not a
+ * schema change — and it is called ONLY at handover creation / regeneration.
+ *
+ * ⚠️ Model limitation: `rabies` is null both when a pet is not vaccinated AND
+ * when it has not been recorded, so "rabies status" here means "a rabies record
+ * exists". An owner of a genuinely-unvaccinated pet cannot satisfy this without a
+ * tri-state rabies field (vaccinated / not / unknown) — a future change.
+ */
+export function handoverReadiness(diary: Diary): HandoverReadiness {
+  const missing: HandoverReadiness["missing"] = [];
+  if (!diary.breed.trim()) missing.push({ label: "breed", where: "edit" });
+  if (diary.rabies == null) missing.push({ label: "rabies status", where: "edit" });
+  if (diary.vet == null) missing.push({ label: "vet contact", where: "edit" });
+  if (!diary.quirks || !diary.quirks.trim())
+    missing.push({ label: "anything a caregiver should know", where: "edit" });
+  if (diary.dietPlan == null) missing.push({ label: "a diet plan", where: "diet" });
+  return { ready: missing.length === 0, missing };
+}
+
 /** What the sign-in gate is allowed to know about a shared diary: its id and the
  *  pet's name — nothing else. */
 export interface HandoverTarget {
@@ -666,13 +737,11 @@ export function resolveCode(code: string): string | null {
   return match?.handover.token ?? null;
 }
 
-/** The named Caregivers bound to a diary (for the owner's "who has access"). */
-export function diaryCaregivers(diaryId: string): Account[] {
+/** The pet's single current Caregiver (ADR-0007: one at a time), or null. */
+export function diaryCaregiver(diaryId: string): Account | null {
   const accounts = readAccounts();
-  return readMemberships()
-    .filter((m) => m.diaryId === diaryId && m.role === "caregiver")
-    .map((m) => accounts[m.accountId])
-    .filter((a): a is Account => !!a);
+  const m = readMemberships().find((x) => x.diaryId === diaryId && x.role === "caregiver");
+  return m ? accounts[m.accountId] ?? null : null;
 }
 
 /** The signed-in account's role on a given diary, or null if they have none. */
@@ -710,6 +779,13 @@ export function joinAsCaregiver(token: string): Membership | null {
     (m) => m.accountId === acct.id && m.diaryId === target.diaryId
   );
   if (existing) return existing.role === "caregiver" ? existing : null;
+  // 1:1 (ADR-0007): a pet has at most one Caregiver at a time. `existing` already
+  // covered this account, so any caregiver row left here belongs to someone else —
+  // reject; the Owner ends that care before a new helper can take the spot.
+  const occupied = readMemberships().some(
+    (m) => m.diaryId === target.diaryId && m.role === "caregiver"
+  );
+  if (occupied) return null;
   const membership: Membership = {
     accountId: acct.id,
     diaryId: target.diaryId,
@@ -724,9 +800,13 @@ export function joinAsCaregiver(token: string): Membership | null {
 /**
  * Whole-link revoke — ends access for everyone at once. The token dies AND every
  * Caregiver bound to THIS diary is unbound (their /care view already stops on the
- * dead token; this also clears the rows so the caregiver lists in slices 05-06
- * stay honest). The owner membership and every OTHER diary's memberships are
- * untouched.
+ * dead token; this also clears the rows so the caregiver lists stay honest). The
+ * owner membership and every OTHER diary's memberships are untouched.
+ *
+ * ADR-0006: revoke no longer erases the Caregiver — before dropping their
+ * membership it retains a private, access-less Past Caregiver record for the
+ * Owner (history + a future Rating). Access is genuinely gone (no membership);
+ * only the Owner's memory of them remains.
  */
 export function revokeHandoverLink(): Diary | null {
   const cur = getDiary();
@@ -736,11 +816,116 @@ export function revokeHandoverLink(): Diary | null {
     handover: { token: null, createdAt: null },
   };
   writeDiary(next);
-  const remaining = readMemberships().filter(
-    (m) => !(m.diaryId === cur.id && m.role === "caregiver")
+  const all = readMemberships();
+  const ending = all.filter((m) => m.diaryId === cur.id && m.role === "caregiver");
+  retainPastCaregivers(
+    cur.id,
+    ending.map((m) => m.accountId)
   );
+  const remaining = all.filter((m) => !(m.diaryId === cur.id && m.role === "caregiver"));
   write(MEMBERSHIPS_KEY, remaining);
   return next;
+}
+
+/**
+ * Record each ending Caregiver as a Past Caregiver of the diary (ADR-0006). One
+ * record per (account, diary): if they were revoked before, the timestamp moves
+ * to this most-recent access-end rather than duplicating them.
+ */
+function retainPastCaregivers(diaryId: string, accountIds: string[]): void {
+  if (accountIds.length === 0) return;
+  const now = new Date().toISOString();
+  const records = readPastCaregivers();
+  for (const accountId of accountIds) {
+    const existing = records.find((r) => r.accountId === accountId && r.diaryId === diaryId);
+    if (existing) existing.endedAt = now;
+    else records.push({ accountId, diaryId, endedAt: now });
+  }
+  write(PAST_CAREGIVERS_KEY, records);
+}
+
+/**
+ * The Owner's private Past Caregivers for a diary (ADR-0006) — Accounts whose
+ * access ended, resolved to names, most-recent first. Anyone who has since
+ * rejoined (holds a live Caregiver membership again) is excluded: they are a
+ * current Caregiver, not a past one. Rendered by ticket 05 on the Circle.
+ */
+export function pastCaregivers(diaryId: string): { account: Account; endedAt: string }[] {
+  const accounts = readAccounts();
+  const liveCaregiverIds = new Set(
+    readMemberships()
+      .filter((m) => m.diaryId === diaryId && m.role === "caregiver")
+      .map((m) => m.accountId)
+  );
+  return readPastCaregivers()
+    .filter((r) => r.diaryId === diaryId && !liveCaregiverIds.has(r.accountId))
+    .sort((a, b) => b.endedAt.localeCompare(a.endedAt))
+    .map((r) => ({ account: accounts[r.accountId], endedAt: r.endedAt }))
+    .filter((x): x is { account: Account; endedAt: string } => !!x.account);
+}
+
+/* ---- private Ratings (owner → caregiver, ticket 07) --------------------- */
+
+/**
+ * The signed-in Owner's private Rating of a Caregiver on a diary, or null. Reads
+ * against the CURRENT account as the owner, so a Caregiver calling this only ever
+ * sees ratings THEY wrote — never the owner's rating of them. That is what keeps
+ * a Rating private by construction (ADR-0005; CONTEXT.md).
+ */
+export function getRating(caregiverAccountId: string, diaryId: string): Rating | null {
+  const acct = getAccount();
+  if (!acct) return null;
+  return (
+    readRatings().find(
+      (r) =>
+        r.ownerAccountId === acct.id &&
+        r.caregiverAccountId === caregiverAccountId &&
+        r.diaryId === diaryId
+    ) ?? null
+  );
+}
+
+/**
+ * Set or update the current Owner's Rating of a Caregiver on a diary. Upsert:
+ * one Rating per (owner, caregiver, diary), so editing overwrites the stars/note
+ * rather than adding a second. Stars are clamped to 1-5; an empty note is
+ * dropped. The record is keyed by account ids (not the link), so it survives a
+ * revoke and re-share.
+ */
+export function setRating(
+  caregiverAccountId: string,
+  diaryId: string,
+  stars: number,
+  note: string
+): Rating | null {
+  const acct = getAccount();
+  if (!acct) return null;
+  const clean = Math.max(1, Math.min(5, Math.round(stars)));
+  const trimmed = note.trim();
+  const ratings = readRatings();
+  const existing = ratings.find(
+    (r) =>
+      r.ownerAccountId === acct.id &&
+      r.caregiverAccountId === caregiverAccountId &&
+      r.diaryId === diaryId
+  );
+  const now = new Date().toISOString();
+  if (existing) {
+    existing.stars = clean;
+    existing.note = trimmed || undefined;
+    existing.updatedAt = now;
+  } else {
+    ratings.push({
+      ownerAccountId: acct.id,
+      caregiverAccountId,
+      diaryId,
+      stars: clean,
+      note: trimmed || undefined,
+      updatedAt: now,
+    });
+  }
+  write(RATINGS_KEY, ratings);
+  return getRating(caregiverAccountId, diaryId);
 }
 
 /* ---- caregiving ("Helping with") + demo seeding (slice 05) -------------- */
@@ -793,16 +978,16 @@ function buildDemoDiary(
       createdAt: new Date().toISOString(),
       coatType: groom.coatType,
       frequencyWeeks: groom.frequencyWeeks,
-      summary: `${name}'s ${groom.coatType} does best with a steady rhythm — most of it you can do at home.`,
+      summary: `${name}'s ${groom.coatType} does best with a steady rhythm, and most of it you can do at home.`,
       routine: [
         `Brush ${groom.brushing} to stop mats and cut shedding.`,
-        "Bath every 4–6 weeks, or when actually dirty — over-washing dries the skin.",
+        "Bath every 4–6 weeks, or when actually dirty. Over-washing dries the skin.",
         "Trim nails every 3–4 weeks; a click on the floor means they're long.",
         "Check ears and teeth weekly.",
       ],
       professional:
         species === "cat"
-          ? `Most cats self-groom, but a ${groom.coatType} mats easily — a professional groom about every ${groom.frequencyWeeks} weeks helps.`
+          ? `Most cats self-groom, but a ${groom.coatType} mats easily, so a professional groom about every ${groom.frequencyWeeks} weeks helps.`
           : `A professional groom about every ${groom.frequencyWeeks} weeks keeps the coat and nails in shape.`,
     },
     feedingLog: [{ date: today(), by: ownerName }],
@@ -830,7 +1015,7 @@ export function ensureDemoCaregiving(): void {
       "Mochi",
       "cat",
       "Ragdoll",
-      "Naps on the windowsill every afternoon — leave the blind up.",
+      "Naps on the windowsill every afternoon. Leave the blind up.",
       { food: "Ocean Fish blend", portionPerDay: "About 70 g of dry food a day", meals: "2 meals" },
       { coatType: "long double coat", frequencyWeeks: 6, brushing: "every day or two" },
       "Priya"

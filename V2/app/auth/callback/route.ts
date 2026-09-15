@@ -6,7 +6,12 @@ import { supabaseServer } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") || "/diary";
+  // `next` is attacker-controllable (it rides in the emailed link), so only
+  // follow same-origin destinations — otherwise the callback becomes an open
+  // redirect. A bare prefix check is not enough: `//evil.com` and backslash
+  // variants like `/\evil.com` both resolve to another host, so resolve the
+  // value and compare origins.
+  const next = safeNext(url.searchParams.get("next"), url.origin);
 
   if (code) {
     const supabase = await supabaseServer();
@@ -14,4 +19,18 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.redirect(new URL(next, url.origin));
+}
+
+/** Returns a same-origin path (+query/hash) from an untrusted `next`, or
+ *  `/diary` when it's missing, malformed, or points at another origin. */
+function safeNext(raw: string | null, origin: string): string {
+  const fallback = "/diary";
+  if (!raw) return fallback;
+  try {
+    const dest = new URL(raw, origin);
+    if (dest.origin !== origin) return fallback;
+    return dest.pathname + dest.search + dest.hash;
+  } catch {
+    return fallback;
+  }
 }

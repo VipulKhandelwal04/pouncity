@@ -28,32 +28,40 @@ export function FeedingTap({
   const [remind, setRemind] = useState(false);
   const [justFed, setJustFed] = useState(false);
 
-  useEffect(() => setRemind(getFeedReminderFor(diary.id)), [diary.id]);
+  useEffect(() => {
+    let cancelled = false;
+    getFeedReminderFor(diary.id).then((v) => {
+      if (!cancelled) setRemind(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [diary.id]);
   useEffect(() => setNoteText(entry?.note ?? ""), [entry?.note]);
 
-  function confirm() {
-    const d = confirmFeedingFor(diary.id, by);
+  async function confirm() {
+    const d = await confirmFeedingFor(diary.id, by);
     if (!d) return;
     setJustFed(true);
     onChange(d);
   }
-  function undo() {
-    const d = undoFeedingFor(diary.id);
+  async function undo() {
+    const d = await undoFeedingFor(diary.id);
     if (!d) return;
     setNoteOpen(false);
     setJustFed(false);
     onChange(d);
   }
-  function saveNote() {
-    const d = setTodayNoteFor(diary.id, noteText);
+  async function saveNote() {
+    const d = await setTodayNoteFor(diary.id, noteText);
     if (!d) return;
     setNoteOpen(false);
     onChange(d);
   }
-  function toggleRemind() {
+  async function toggleRemind() {
     const v = !remind;
     setRemind(v);
-    setFeedReminderFor(diary.id, v);
+    await setFeedReminderFor(diary.id, v);
   }
 
   return (

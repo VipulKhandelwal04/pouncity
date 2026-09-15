@@ -30,21 +30,26 @@ export default function GroomingPage() {
   const [mErr, setMErr] = useState<string | null>(null);
 
   useEffect(() => {
-    const d = getDiary();
-    if (!d) {
-      router.replace("/diary/create");
-      return;
+    async function run() {
+      const d = await getDiary();
+      if (!d) {
+        router.replace("/diary/create");
+        return;
+      }
+      setDiary(d);
+      setCoat(d.coatType ?? "");
+      setRemind(await getGroomReminder());
+      setStep(d.groomingGuide ? "view" : "intro");
     }
-    setDiary(d);
-    setCoat(d.coatType ?? "");
-    setRemind(getGroomReminder());
-    setStep(d.groomingGuide ? "view" : "intro");
+    run();
   }, [router]);
 
   useEffect(() => {
     if (step !== "working") return;
-    const t = setTimeout(() => {
-      const d = requestGroomingGuide(coat);
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const d = await requestGroomingGuide(coat);
+      if (cancelled) return;
       if (!d) {
         setStep("error");
         return;
@@ -52,13 +57,16 @@ export default function GroomingPage() {
       setDiary(d);
       setStep("view");
     }, 1200);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [step, coat]);
 
-  function toggleRemind() {
+  async function toggleRemind() {
     const v = !remind;
     setRemind(v);
-    setGroomReminder(v);
+    await setGroomReminder(v);
   }
 
   if (step === "loading" || !diary) {
@@ -84,13 +92,13 @@ export default function GroomingPage() {
     setStep("manual");
   }
 
-  function saveManual() {
+  async function saveManual() {
     const n = parseInt(mFreq, 10);
     if (!coat.trim() || !mFreq.trim() || isNaN(n) || n <= 0) {
       setMErr("Add the coat type and how often to groom (in weeks).");
       return;
     }
-    const d = saveGroomingGuide({
+    const d = await saveGroomingGuide({
       coatType: coat,
       frequencyWeeks: n,
       routine: mRoutine.split("\n"),

@@ -8,7 +8,6 @@ import { HelperRow } from "@/components/HelperRow";
 import { HelpingWithList } from "@/components/HelpingWithList";
 import {
   getAccount,
-  signIn,
   getDiary,
   diaryCaregiver,
   pastCaregivers,
@@ -26,6 +25,7 @@ import {
   joinAsCaregiver,
   type Account,
   type Diary,
+  type Rating,
 } from "@/lib/diary-service";
 
 /**
@@ -53,29 +53,51 @@ export default function CirclePage() {
   const [joinCode, setJoinCode] = useState("");
   const [joinError, setJoinError] = useState<string | null>(null);
   const [joinedName, setJoinedName] = useState<string | null>(null);
-  const [, bumpRatings] = useState(0); // ratings live in the seam; re-read on change
+  // Ratings keyed by caregiverAccountId — getRating() is async now, so it can't be
+  // called inline during render (it was, in the mock/sync version); fetched here
+  // for every account id currently rendered (the current caregiver + past helpers)
+  // and updated locally by rate() rather than re-fetched on every change.
+  const [ratings, setRatings] = useState<Record<string, Rating | null>>({});
 
   useEffect(() => {
-    // Same mock-identity guard as the hub: carry an account until real auth
-    // (Supabase) lands, and capture a display name once before anything else.
-    const acct = getAccount() ?? signIn("you@pouncity.app");
-    if (!acct.name) {
-      router.replace("/diary/welcome");
-      return;
+    async function run() {
+      const acct = await getAccount();
+      if (!acct) {
+        router.replace("/sign-in?next=" + encodeURIComponent("/diary/circle"));
+        return;
+      }
+      if (!acct.name) {
+        router.replace("/diary/welcome");
+        return;
+      }
+      const owned = await getDiary();
+      if (owned) {
+        await ensureDemoCaregiving(); // keep "pets you help with" populated in the demo
+      }
+      // A signed-in account can always reach the Circle — it is also where you enter
+      // a code to help with someone's pet, so a 0-caregiving account is not bounced.
+      const cg = owned ? await diaryCaregiver(owned.id) : null;
+      const past = owned ? await pastCaregivers(owned.id) : [];
+      setAccount(acct);
+      setDiary(owned);
+      setCaregiver(cg);
+      setPastHelpers(past);
+      setHelping(await caregivingDiaries());
+      setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+
+      if (owned) {
+        const ids = [cg?.id, ...past.map((p) => p.account.id)].filter(
+          (id): id is string => !!id
+        );
+        const entries = await Promise.all(
+          ids.map(async (id) => [id, await getRating(id, owned.id)] as const)
+        );
+        setRatings(Object.fromEntries(entries));
+      }
+
+      setReady(true);
     }
-    const owned = getDiary();
-    if (owned) {
-      ensureDemoCaregiving(); // keep "pets you help with" populated in the demo
-    }
-    // A signed-in account can always reach the Circle — it is also where you enter
-    // a code to help with someone's pet, so a 0-caregiving account is not bounced.
-    setAccount(acct);
-    setDiary(owned);
-    setCaregiver(owned ? diaryCaregiver(owned.id) : null);
-    setPastHelpers(owned ? pastCaregivers(owned.id) : []);
-    setHelping(caregivingDiaries());
-    setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
-    setReady(true);
+    run();
   }, [router]);
 
   if (!ready) {
@@ -93,7 +115,7 @@ export default function CirclePage() {
 
   // Health gate (ticket 06): a link cannot be created/regenerated until the pet's
   // safety basics are present. Fires ONLY here, at handover creation.
-  function createLink() {
+  async function createLink() {
     if (!diary) return;
     const readiness = handoverReadiness(diary);
     if (!readiness.ready) {
@@ -101,10 +123,10 @@ export default function CirclePage() {
       return;
     }
     setGateMissing(null);
-    const d = regenerateHandoverLink();
+    const d = await regenerateHandoverLink();
     if (d) setDiary(d);
   }
-  function replaceLink() {
+  async function replaceLink() {
     if (!diary) return;
     const readiness = handoverReadiness(diary);
     if (!readiness.ready) {
@@ -112,7 +134,7 @@ export default function CirclePage() {
       return;
     }
     setGateMissing(null);
-    const d = regenerateHandoverLink();
+    const d = await regenerateHandoverLink();
     if (d) {
       setDiary(d);
       setCopiedWhat(null);
@@ -120,12 +142,18 @@ export default function CirclePage() {
   }
   // Ends the pet's care: kills the link AND unbinds the one caregiver, who becomes
   // a Past Caregiver (ADR-0006). Also cancels an unclaimed invite (no caregiver).
-  function endCare() {
-    const d = revokeHandoverLink();
+  async function endCare() {
+    const d = await revokeHandoverLink();
     if (d) {
       setDiary(d);
-      setCaregiver(diaryCaregiver(d.id)); // → null
-      setPastHelpers(pastCaregivers(d.id)); // the ended caregiver joins past helpers
+      setCaregiver(await diaryCaregiver(d.id)); // → null
+      const past = await pastCaregivers(d.id); // the ended caregiver joins past helpers
+      setPastHelpers(past);
+      const ids = past.map((p) => p.account.id);
+      const entries = await Promise.all(
+        ids.map(async (id) => [id, await getRating(id, d.id)] as const)
+      );
+      setRatings((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
       setConfirmingEnd(false);
       setCopiedWhat(null);
     }
@@ -146,45 +174,44 @@ export default function CirclePage() {
       /* cancelled or unsupported */
     }
   }
-  function joinByCode(e: React.FormEvent) {
+  async function joinByCode(e: React.FormEvent) {
     e.preventDefault();
     setJoinedName(null);
-    const resolved = resolveCode(joinCode);
+    const resolved = await resolveCode(joinCode);
     if (!resolved) {
       setJoinError("We couldn't find a pet for that code. Check it and try again.");
       return;
     }
-    const target = resolveHandoverGate(resolved);
-    if (target && roleOnDiary(target.diaryId) === "owner") {
+    const target = await resolveHandoverGate(resolved);
+    if (target && (await roleOnDiary(target.diaryId)) === "owner") {
       setJoinError(`That's your own pet's code. ${target.petName} is already yours.`);
       return;
     }
     // 1:1 (ADR-0007): if the pet already has a caregiver who isn't me, the spot is
     // taken. Name that clearly rather than a generic failure.
     if (target) {
-      const current = diaryCaregiver(target.diaryId);
+      const current = await diaryCaregiver(target.diaryId);
       if (current && current.id !== account?.id) {
         setJoinError(`${target.petName} already has a caregiver right now.`);
         return;
       }
     }
-    const membership = joinAsCaregiver(resolved);
+    const membership = await joinAsCaregiver(resolved);
     if (!membership) {
       setJoinError("That code isn't active anymore. Ask the owner for a fresh one.");
       return;
     }
-    setHelping(caregivingDiaries()); // the newly-joined pet now appears below
+    setHelping(await caregivingDiaries()); // the newly-joined pet now appears below
     setJoinCode("");
     setJoinError(null);
     setJoinedName(target?.petName ?? "the pet");
   }
-  function rate(caregiverAccountId: string, stars: number, note: string) {
+  async function rate(caregiverAccountId: string, stars: number, note: string) {
     if (!diary) return;
-    setRating(caregiverAccountId, diary.id, stars, note);
-    bumpRatings((n) => n + 1); // re-render so the row and the sort pick up the change
+    const updated = await setRating(caregiverAccountId, diary.id, stars, note);
+    setRatings((prev) => ({ ...prev, [caregiverAccountId]: updated }));
   }
-  const starsFor = (accountId: string) =>
-    diary ? getRating(accountId, diary.id)?.stars ?? 0 : 0;
+  const starsFor = (accountId: string) => ratings[accountId]?.stars ?? 0;
   // Past helpers are ordered by the Owner's own Ratings — most trusted first.
   const sortedPast = [...pastHelpers].sort((a, b) => {
     const byStars = starsFor(b.account.id) - starsFor(a.account.id);
@@ -212,7 +239,7 @@ export default function CirclePage() {
                       account={caregiver}
                       sublabel="Caregiver"
                       variant="current"
-                      rating={getRating(caregiver.id, diary.id)}
+                      rating={ratings[caregiver.id] ?? null}
                       onRate={(stars, note) => rate(caregiver.id, stars, note)}
                     />
                   </ul>
@@ -283,7 +310,7 @@ export default function CirclePage() {
                     account={past}
                     sublabel={`Access ended ${fmtEndedDate(endedAt)}`}
                     variant="past"
-                    rating={getRating(past.id, diary.id)}
+                    rating={ratings[past.id] ?? null}
                     onRate={(stars, note) => rate(past.id, stars, note)}
                   />
                 ))}

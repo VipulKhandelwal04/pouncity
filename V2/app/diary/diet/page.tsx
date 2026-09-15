@@ -22,21 +22,26 @@ export default function DietPage() {
   const [mErr, setMErr] = useState<string | null>(null);
 
   useEffect(() => {
-    const d = getDiary();
-    if (!d) {
-      router.replace("/diary/create");
-      return;
+    async function run() {
+      const d = await getDiary();
+      if (!d) {
+        router.replace("/diary/create");
+        return;
+      }
+      setDiary(d);
+      setFood(d.currentFood ?? "");
+      setStep(d.dietPlan ? "view" : "intro");
     }
-    setDiary(d);
-    setFood(d.currentFood ?? "");
-    setStep(d.dietPlan ? "view" : "intro");
+    run();
   }, [router]);
 
   // AI "generation" runs on entering the working step (canned; AI Gateway later)
   useEffect(() => {
     if (step !== "working") return;
-    const t = setTimeout(() => {
-      const d = requestDietPlan(food);
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const d = await requestDietPlan(food);
+      if (cancelled) return;
       if (!d) {
         setStep("error");
         return;
@@ -44,7 +49,10 @@ export default function DietPage() {
       setDiary(d);
       setStep("view");
     }, 1200);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [step, food]);
 
   if (step === "loading" || !diary) {
@@ -71,12 +79,12 @@ export default function DietPage() {
     setStep("manual");
   }
 
-  function saveManual() {
+  async function saveManual() {
     if (!mPortion.trim() || !mMeals.trim()) {
       setMErr("Add at least the amount per day and the meals.");
       return;
     }
-    const d = saveDietPlan({
+    const d = await saveDietPlan({
       currentFood: food,
       portionPerDay: mPortion,
       meals: mMeals,

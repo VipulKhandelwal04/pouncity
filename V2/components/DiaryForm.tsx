@@ -117,7 +117,10 @@ export function DiaryForm({
     return Object.keys(er).length === 0;
   }
 
-  function submit(e: React.FormEvent) {
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!validate()) return;
     const core = {
@@ -128,24 +131,32 @@ export function DiaryForm({
       weightKg: parseFloat(weight),
       photoUrl: photo,
     };
-    if (mode === "create") {
-      createDiary(core);
-    } else {
-      const vetFilled = vetName.trim() || vetPhone.trim() || vetClinic.trim();
-      updateDiary({
-        ...core,
-        quirks: quirks.trim() ? quirks.trim() : null,
-        vet: vetFilled
-          ? { name: vetName.trim(), phone: vetPhone.trim(), clinic: vetClinic.trim() }
-          : null,
-        neuterStatus,
-        registered,
-        rabies: rabies
-          ? { certificateUrl: rabiesCert, expiry: rabiesExpiry.trim() ? rabiesExpiry : null }
-          : null,
-      });
+    setSaving(true);
+    setSaveError(null);
+    try {
+      if (mode === "create") {
+        await createDiary(core);
+      } else {
+        const vetFilled = vetName.trim() || vetPhone.trim() || vetClinic.trim();
+        await updateDiary({
+          ...core,
+          quirks: quirks.trim() ? quirks.trim() : null,
+          vet: vetFilled
+            ? { name: vetName.trim(), phone: vetPhone.trim(), clinic: vetClinic.trim() }
+            : null,
+          neuterStatus,
+          registered,
+          rabies: rabies
+            ? { certificateUrl: rabiesCert, expiry: rabiesExpiry.trim() ? rabiesExpiry : null }
+            : null,
+        });
+      }
+      router.replace("/diary");
+    } catch {
+      setSaveError("Couldn't save. Check your connection and try again.");
+    } finally {
+      setSaving(false);
     }
-    router.replace("/diary");
   }
 
   return (
@@ -448,9 +459,14 @@ export function DiaryForm({
         </>
       )}
 
+      {saveError && (
+        <p className="field-msg" role="alert" style={{ marginTop: 16 }}>
+          {saveError}
+        </p>
+      )}
       <div style={{ display: "flex", gap: 12, marginTop: 22 }}>
-        <button type="submit" className="pill" style={{ flex: 1 }}>
-          {mode === "create" ? "Create diary" : "Save changes"}
+        <button type="submit" className="pill" style={{ flex: 1 }} disabled={saving}>
+          {saving ? "Saving…" : mode === "create" ? "Create diary" : "Save changes"}
         </button>
         {mode === "edit" && (
           <Link href="/diary" className="pill pill--ghost">

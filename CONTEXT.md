@@ -46,7 +46,7 @@ The **Membership** role of the Account that created a **Diary** — the only rol
 _Avoid_: admin (there is no separate admin), primary caregiver, "a different person from the caregiver"
 
 **Caregiver**:
-The **Membership** role of a signed-in **Account** bound to a **Diary** via its **Handover link** / **Referral code**. A Caregiver can log the daily **Feeding confirm** (attributed to their name) and opt into reminders, and read the pet basics, diet plan, grooming guide, quirks and vet contact — but **cannot** edit the diary, manage sharing, or see admin **records**. One Account can be a Caregiver on many diaries from different Owners. Access ends when that diary's Owner revokes its link.
+The **Membership** role of a signed-in **Account** bound to a **Diary** via its **Handover link** / **Referral code**. A Caregiver can log the daily **Feeding confirm** (attributed to their name) and opt into reminders, and read the pet basics, diet plan, grooming guide, quirks and vet contact — but **cannot** edit the diary, manage sharing, or see admin **records**. One Account can be a Caregiver on many diaries from different Owners, but a **Diary has only one Caregiver at a time** (ADR-0007) — a further helper waits until the current one's care ends. Access ends when the Owner ends their care; the person is then retained as a **Past Caregiver**.
 _Avoid_: sitter (that's one context for a caregiver), viewer, user, helper
 
 **Viewer** — *retired 2026-09-14 (see ADR-0004)*:
@@ -54,7 +54,7 @@ There is no anonymous access. Formerly anyone opening a **Handover link** could 
 _Avoid_: reviving anonymous read
 
 **Access** (to a diary):
-A diary is readable only by its **Owner** and the **Caregivers** bound to it — **access requires an Account** (ADR-0004). It is granted by the diary's standing **Handover link** / **Referral code**: opening it signed-out reaches a gate; signing in binds a **Caregiver** membership. "Who has access" resolves to the named Caregivers (there is **no anonymous count**). Revoke is **whole-link and per-diary**: it unbinds every Caregiver on that diary at once and leaves their memberships on other diaries untouched. The pilot's "flat" model means no field-level redaction *within a role*, but Owner and Caregiver differ in what they can see and do.
+A diary is readable only by its **Owner** and the **Caregivers** bound to it — **access requires an Account** (ADR-0004). It is granted by the diary's standing **Handover link** / **Referral code**: opening it signed-out reaches a gate; signing in binds a **Caregiver** membership. "Who has access" resolves to the pet's **single current Caregiver** plus the Owner (there is **no anonymous count**, and only one Caregiver at a time per ADR-0007). Ending care is **whole-link and per-diary**: it unbinds that one Caregiver (retained as a **Past Caregiver**, ADR-0006) and turns the link off, leaving memberships on other diaries untouched. The pilot's "flat" model means no field-level redaction *within a role*, but Owner and Caregiver differ in what they can see and do.
 
 **Handover link**:
 The standing, non-expiring unit of **Access** to one diary. It grants **no anonymous read** — opening it leads to a sign-in gate showing only the pet's name and "Sign up to help." The **Owner** revokes it manually (per-diary); a fresh one can then be issued. Its human-friendly twin is the **Referral code**.
@@ -67,3 +67,27 @@ _Avoid_: invite code (it is the same link, not per-recipient), promo code
 **Feeding confirm**:
 The once-per-day, per-diary record that the pet was fed. Idempotent (one per day; a repeat is a no-op), reversible the same day, attributed to whoever logged it (**Owner** or **Caregiver**, by **Account** name), with an optional free-text deviation note. A binary confirm, not quantity logging.
 _Avoid_: feeding log entry, meal record, "the daily tap" (that names the UI affordance, not the record)
+
+**Circle** — *added 2026-09-15*:
+An **Owner**'s one place to manage who cares for their pet: the **Caregiver** who
+currently has access (at most one at a time, ADR-0007), the **past Caregivers**
+whose access has ended (kept for the Owner's private history and **Rating**), and
+the pets the Account helps with. It is where the Owner invites a sitter, hands out
+the **Handover link** / **Referral code**, and ends care. Circle membership is
+only ever earned through a link or code, never through public discovery.
+_Avoid_: network, contacts, sitters list
+
+**Past Caregiver** — *added 2026-09-15*:
+An Account that was a **Caregiver** on a **Diary** and whose access has since
+ended (the Owner revoked the link). The access is gone, but the Owner keeps a
+private record of them in the **Circle** so they can still be seen and **Rated**.
+Not a live role — a **Membership** no longer exists — just the Owner's history.
+_Avoid_: former sitter, ex-caregiver
+
+**Rating** — *added 2026-09-15*:
+Private feedback an **Owner** keeps on a **Caregiver**: stars and an optional
+note they can leave or update at any time from their **Circle** (there is no
+discrete "handover" to rate — the link is standing), visible only to that Owner
+and used to order or flag the Circle. It is never shown to the Caregiver or
+anyone else; a public, aggregated reputation is deferred (ADR-0005).
+_Avoid_: review, reputation, score

@@ -20,13 +20,16 @@ export default function FeedingDiaryPage() {
   });
 
   useEffect(() => {
-    const d = getDiary();
-    if (!d) {
-      router.replace("/diary/create");
-      return;
+    async function run() {
+      const d = await getDiary();
+      if (!d) {
+        router.replace("/diary/create");
+        return;
+      }
+      setDiary(d);
+      setReady(true);
     }
-    setDiary(d);
-    setReady(true);
+    run();
   }, [router]);
 
   if (!ready || !diary) {

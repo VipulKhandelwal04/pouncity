@@ -4,24 +4,30 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Wordmark } from "@/components/Wordmark";
 import { DiaryForm } from "@/components/DiaryForm";
-import { getAccount, signIn, hasDiary } from "@/lib/diary-service";
+import { getAccount, hasDiary } from "@/lib/diary-service";
 
 export default function CreatePage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Arrived from the sign-in handoff; carry the mock account.
-    const acct = getAccount() ?? signIn("you@pouncity.app");
-    if (!acct.name) {
-      router.replace("/diary/welcome"); // capture a name before onboarding a pet
-      return;
+    async function run() {
+      const acct = await getAccount();
+      if (!acct) {
+        router.replace("/sign-in?next=" + encodeURIComponent("/diary/create"));
+        return;
+      }
+      if (!acct.name) {
+        router.replace("/diary/welcome"); // capture a name before onboarding a pet
+        return;
+      }
+      if (await hasDiary()) {
+        router.replace("/diary"); // already has a diary — no re-onboarding
+        return;
+      }
+      setReady(true);
     }
-    if (hasDiary()) {
-      router.replace("/diary"); // already has a diary — no re-onboarding
-      return;
-    }
-    setReady(true);
+    run();
   }, [router]);
 
   if (!ready) {

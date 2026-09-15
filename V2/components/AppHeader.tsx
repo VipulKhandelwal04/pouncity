@@ -9,8 +9,8 @@ function signInUrl(): string {
 }
 
 export function AppHeader({ account }: { account: Account | null }) {
-  function handleSignOut() {
-    signOut();
+  async function handleSignOut() {
+    await signOut();
     window.location.href = signInUrl();
   }
 

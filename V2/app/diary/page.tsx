@@ -9,7 +9,6 @@ import { FeedingTap } from "@/components/FeedingTap";
 import { HelpingWithList } from "@/components/HelpingWithList";
 import {
   getAccount,
-  signIn,
   getDiary,
   caregivingDiaries,
   diaryCaregiver,
@@ -30,34 +29,42 @@ export default function DiaryHome() {
   const [diary, setDiary] = useState<Diary | null>(null);
   const [helping, setHelping] = useState<Diary[]>([]);
   const [account, setAccount] = useState<Account | null>(null);
+  const [caregiver, setCaregiver] = useState<Account | null>(null);
   const [ready, setReady] = useState(false);
   const [nudgeHidden, setNudgeHidden] = useState(false);
 
   useEffect(() => {
-    // Real auth is the static /sign-in page (Supabase later); we carry a mock
-    // identity until it exists. A person can be an owner AND a caregiver, so the
-    // home holds both: "Your pet" (if they own one) and "Helping with".
-    const acct = getAccount() ?? signIn("you@pouncity.app");
-    if (!acct.name) {
-      router.replace("/diary/welcome"); // first sign-in → capture a display name
-      return;
+    async function run() {
+      // A person can be an owner AND a caregiver, so the home holds both:
+      // "Your pet" (if they own one) and "Helping with".
+      const acct = await getAccount();
+      if (!acct) {
+        router.replace("/sign-in?next=" + encodeURIComponent("/diary"));
+        return;
+      }
+      if (!acct.name) {
+        router.replace("/diary/welcome"); // first sign-in → capture a display name
+        return;
+      }
+      const owned = await getDiary();
+      if (owned) {
+        await ensureDemoCaregiving(); // populate "Helping with" for the single-browser demo
+        setCaregiver(await diaryCaregiver(owned.id));
+      } else if ((await caregivingDiaries()).length === 0) {
+        router.replace("/diary/create"); // no pet, not helping anyone → onboard an owner
+        return;
+      }
+      setAccount(acct);
+      setDiary(owned);
+      setHelping(await caregivingDiaries());
+      setNudgeHidden(await isNudgeDismissed());
+      setReady(true);
     }
-    const owned = getDiary();
-    if (owned) {
-      ensureDemoCaregiving(); // populate "Helping with" for the single-browser demo
-    } else if (caregivingDiaries().length === 0) {
-      router.replace("/diary/create"); // no pet, not helping anyone → onboard an owner
-      return;
-    }
-    setAccount(acct);
-    setDiary(owned);
-    setHelping(caregivingDiaries());
-    setNudgeHidden(isNudgeDismissed());
-    setReady(true);
+    run();
   }, [router]);
 
-  function dismissNudge() {
-    setNudgeDismissed(true);
+  async function dismissNudge() {
+    await setNudgeDismissed(true);
     setNudgeHidden(true);
   }
 
@@ -80,6 +87,7 @@ export default function DiaryHome() {
           <OwnerHubBody
             diary={diary}
             account={account}
+            caregiver={caregiver}
             nudgeHidden={nudgeHidden}
             onDismissNudge={dismissNudge}
             onDiaryChange={setDiary}
@@ -108,19 +116,20 @@ export default function DiaryHome() {
 function OwnerHubBody({
   diary,
   account,
+  caregiver,
   nudgeHidden,
   onDismissNudge,
   onDiaryChange,
 }: {
   diary: Diary;
   account: Account | null;
+  caregiver: Account | null;
   nudgeHidden: boolean;
   onDismissNudge: () => void;
   onDiaryChange: (d: Diary) => void;
 }) {
   const comp = completeness(diary);
   const history = feedingHistory(diary);
-  const caregiver = diaryCaregiver(diary.id);
   const circleStatus: HubCardStatus = caregiver
     ? { label: caregiver.name.split(" ")[0] || "Caregiver", tone: "ready" }
     : { label: "No one yet", tone: "empty" };

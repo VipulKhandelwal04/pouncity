@@ -1,38 +1,57 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Wordmark } from "@/components/Wordmark";
-import { getAccount, signIn, setAccountName, hasDiary } from "@/lib/diary-service";
+import { getAccount, setAccountName, hasDiary } from "@/lib/diary-service";
 
 export default function WelcomePage() {
+  return (
+    <Suspense>
+      <Welcome />
+    </Suspense>
+  );
+}
+
+function Welcome() {
   const router = useRouter();
+  const params = useSearchParams();
+  // A Caregiver arriving via the Handover gate passes `next` back to it once
+  // named; an Owner has no `next` and falls through to the diary/create split.
+  const next = params.get("next");
   const [ready, setReady] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // A refresh or deep-link can land here with no account — mint the mock one
-    // first so setAccountName has something to write to.
-    const acct = getAccount() ?? signIn("you@pouncity.app");
-    if (acct.name) {
-      // Name already captured — nothing to do here; go where they belong.
-      router.replace(hasDiary() ? "/diary" : "/diary/create");
-      return;
+    async function run() {
+      const acct = await getAccount();
+      if (!acct) {
+        router.replace(
+          "/sign-in?next=" + encodeURIComponent(next ? `/diary/welcome?next=${next}` : "/diary/welcome")
+        );
+        return;
+      }
+      if (acct.name) {
+        // Name already captured — nothing to do here; go where they belong.
+        router.replace(next || ((await hasDiary()) ? "/diary" : "/diary/create"));
+        return;
+      }
+      setReady(true);
     }
-    setReady(true);
-  }, [router]);
+    run();
+  }, [router, next]);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     const clean = name.trim();
     if (!clean) {
       setError("A first name is enough.");
       return;
     }
-    setAccountName(clean);
+    await setAccountName(clean);
     // New accounts have no pet yet → onboard; a migrated owner keeps their pet.
-    router.replace(hasDiary() ? "/diary" : "/diary/create");
+    router.replace(next || ((await hasDiary()) ? "/diary" : "/diary/create"));
   }
 
   if (!ready) {

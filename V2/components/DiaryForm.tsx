@@ -79,7 +79,7 @@ export function DiaryForm({
       // A PDF is stored as-is (data URL in localStorage now, blob storage later),
       // so cap it — a large file would silently blow the storage quota on save.
       if (f.size > 2 * 1024 * 1024) {
-        setCertErr("That PDF is over 2 MB — upload a smaller file or a photo instead.");
+        setCertErr("That PDF is over 2 MB. Upload a smaller file or a photo instead.");
         return;
       }
       setBusyCert(true);
@@ -108,7 +108,7 @@ export function DiaryForm({
   function validate(): boolean {
     const er: Errors = {};
     if (!name.trim()) er.name = "What's your pet's name?";
-    if (!breed.trim()) er.breed = "Add a breed — or just “mixed”.";
+    if (!breed.trim()) er.breed = "Add a breed, or just “mixed”.";
     if (!age.trim()) er.age = "Roughly how old are they?";
     const w = parseFloat(weight);
     if (!weight.trim()) er.weight = "Add a weight.";
@@ -263,7 +263,7 @@ export function DiaryForm({
           <div className="form-section">
             <h3>Quirks</h3>
             <p className="form-section-note">
-              Anything a sitter should know — habits, fears, the good spots.
+              Anything a sitter should know: habits, fears, the good spots.
             </p>
             <textarea
               className="input"
@@ -424,7 +424,7 @@ export function DiaryForm({
                       disabled={busyCert}
                       style={{ justifySelf: "start" }}
                     >
-                      {busyCert ? "Adding…" : "Upload certificate — photo or PDF"}
+                      {busyCert ? "Adding…" : "Upload certificate (photo or PDF)"}
                     </button>
                   )}
                   {certErr && (

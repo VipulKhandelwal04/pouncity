@@ -122,13 +122,25 @@ button { font-family: inherit; color: inherit; }
 .wordmark .dot { width: 16px; height: 14px; display: inline-block; line-height: 0; }
 .wordmark .dot svg { width: 100%; height: 100%; display: block; }
 
-/* mono micro-label — the only DM Mono surface (kept tiny per DESIGN.md) */
+/* mono micro-label — the only DM Mono surface (kept tiny per DESIGN.md).
+   Reserved for true labels, eyebrows, section headings and chips — never for
+   sentence-length help text, which belongs on .hint below. */
 .mono {
   font-family: var(--font-mono);
   font-weight: 500;
   font-size: 0.66rem;
   letter-spacing: 0.11em;
   text-transform: uppercase;
+  color: var(--ink-72);
+}
+
+/* helper / caption — the readable secondary tier for sentence-length guidance
+   (link hints, sign-in notes, "access ended" status). Body face, sentence case,
+   no tracking: prose a person actually reads, not a tracked mono micro-label. */
+.hint {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  line-height: 1.5;
   color: var(--ink-72);
 }
 
@@ -157,6 +169,13 @@ button { font-family: inherit; color: inherit; }
 .pill:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .pill--ghost { background: var(--panel); }
 .pill--sm { padding: 9px 18px; font-size: 0.9rem; }
+
+/* touch: quiet text-style action buttons (End care, Cancel invite, note edit)
+   keep their compact look on a mouse, but grow to a ≥44px tap target on coarse
+   pointers — same hit-area approach as .switch below. */
+@media (pointer: coarse) {
+  .tap-target { display: inline-flex; align-items: center; min-height: 44px; }
+}
 
 /* card — panel cream, ink border, no shadow */
 .card {
@@ -315,7 +334,14 @@ textarea.input { min-height: 92px; resize: vertical; line-height: 1.5; }
 .pop { animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 
 @media (prefers-reduced-motion: reduce) {
-  * { animation: none !important; transition: none !important; }
-  .pill:hover { transform: none; }
-  .switch .knob { transition: none; }
+  /* Intentional, not a blanket kill. Instant state changes are fine; spatial
+     and decorative motion is not; and genuine feedback must survive. */
+  * { transition: none !important; }
+  .pop { animation: none; }            /* celebratory feeding pop-in: off */
+  .pill:hover { transform: none; }     /* hover lift: off */
+  .switch .knob { transition: none; }  /* knob slide: off */
+  /* The working indicator must still read as "working": trade the spin for a
+     calm opacity pulse. A fade carries no vestibular motion. */
+  .spinner { animation: rm-pulse 1.4s ease-in-out infinite; }
 }
+@keyframes rm-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }

@@ -133,7 +133,7 @@ export default function GroomingPage() {
               rows={2}
               value={mOverview}
               onChange={(e) => setMOverview(e.target.value)}
-              placeholder={`A line about ${diary.name}'s grooming — e.g. Brush often, bath monthly.`}
+              placeholder={`A line about ${diary.name}'s grooming, e.g. Brush often, bath monthly.`}
               autoFocus
             />
           </Field>
@@ -237,7 +237,7 @@ export default function GroomingPage() {
       {step === "error" && (
         <div style={{ display: "grid", gap: 16 }}>
           <div className="card" style={{ borderStyle: "dashed" }}>
-            <p>That didn&rsquo;t save. It&rsquo;s not you — head back and give it another go.</p>
+            <p>That didn&rsquo;t save. It&rsquo;s not you. Head back and give it another go.</p>
           </div>
           <button className="pill" onClick={() => setStep("intro")} style={{ justifySelf: "start" }}>
             Back

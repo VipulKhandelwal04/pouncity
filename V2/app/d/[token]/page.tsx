@@ -8,6 +8,7 @@ import {
   resolveHandoverGate,
   getAccount,
   roleOnDiary,
+  diaryCaregiver,
   signIn,
   setAccountName,
   joinAsCaregiver,
@@ -35,7 +36,7 @@ import {
  * account. (Deliberate deviation from the ticket's "reuse /sign-in" wording —
  * the mock static page can't feed a distinct identity into the seam.)
  */
-type GateStatus = "loading" | "gate" | "invalid";
+type GateStatus = "loading" | "gate" | "invalid" | "taken";
 type Mode = "view" | "email" | "name";
 
 export default function HandoverGate() {
@@ -68,6 +69,14 @@ export default function HandoverGate() {
         return;
       }
     }
+    // 1:1 (ADR-0007): the spot is taken if someone else already cares for this
+    // pet. The owner + this pet's caregiver were already redirected above, so any
+    // caregiver here is a different person — this visitor can't join yet.
+    if (diaryCaregiver(t.diaryId)) {
+      setTarget(t);
+      setStatus("taken");
+      return;
+    }
     setTarget(t);
     setAccount(acct);
     setStatus("gate");
@@ -78,7 +87,14 @@ export default function HandoverGate() {
   /** Bind (unless owner) and go where the resulting role belongs. */
   function finishJoin() {
     if (!target) return;
-    joinAsCaregiver(token); // no-op for an owner; idempotent for a caregiver
+    // Owner → no-op; existing caregiver of this pet → idempotent. A non-member
+    // only binds if the single caregiver spot is still open (ADR-0007).
+    if (roleOnDiary(target.diaryId) === null) {
+      if (!joinAsCaregiver(token)) {
+        setStatus("taken"); // someone claimed the spot first
+        return;
+      }
+    }
     const role = roleOnDiary(target.diaryId);
     router.replace(role === "owner" ? "/diary" : `/care/${target.diaryId}`);
   }
@@ -149,6 +165,28 @@ export default function HandoverGate() {
     );
   }
 
+  if (status === "taken") {
+    return (
+      <>
+        <PublicHeader />
+        <main className="app-shell" style={{ paddingTop: 20 }}>
+          <div
+            className="card"
+            style={{ borderStyle: "dashed", textAlign: "center", padding: "34px 22px" }}
+          >
+            <h1 style={{ fontSize: "1.5rem", marginBottom: 8 }}>
+              {petName} already has a caregiver
+            </h1>
+            <p style={{ color: "var(--ink-72)" }}>
+              Only one person helps with a pet at a time. Ask {petName}&rsquo;s owner to send a
+              fresh invite when they next need a hand.
+            </p>
+          </div>
+        </main>
+      </>
+    );
+  }
+
   // status === "gate" — pet name only, zero diary content.
   return (
     <>
@@ -167,7 +205,7 @@ export default function HandoverGate() {
           </div>
 
           <p style={{ color: "var(--ink-72)", lineHeight: 1.55 }}>
-            Someone shared {petName}&rsquo;s care with you. Sign in to lend a hand — you&rsquo;ll
+            Someone shared {petName}&rsquo;s care with you. Sign in to lend a hand. You&rsquo;ll
             be able to log {petName}&rsquo;s daily feed and follow the care routine, so the
             owner always knows {petName} is looked after.
           </p>
@@ -178,19 +216,18 @@ export default function HandoverGate() {
               <button className="pill" onClick={oneTap} style={{ justifySelf: "start", marginTop: 4 }}>
                 Help with {petName}
               </button>
-              <span className="mono" style={{ color: "var(--ink-72)", fontSize: "0.58rem" }}>
+              <span className="hint">
                 Signed in as {account.name || account.email}.{" "}
                 <button
                   type="button"
                   onClick={switchIdentity}
-                  className="mono"
                   style={{
                     background: "transparent",
                     border: "none",
                     padding: 0,
                     cursor: "pointer",
                     color: "var(--coral-text)",
-                    fontSize: "inherit",
+                    font: "inherit",
                   }}
                 >
                   Not you?
@@ -206,10 +243,10 @@ export default function HandoverGate() {
               >
                 Sign up to help
               </button>
-              <span className="mono" style={{ color: "var(--ink-72)", fontSize: "0.58rem" }}>
+              <span className="hint">
                 You&rsquo;ll set up a quick account so {petName}&rsquo;s owner knows who&rsquo;s
                 helping.{" "}
-                <Link href="/join" style={{ color: "var(--coral-text)" }}>
+                <Link href="/diary/circle" style={{ color: "var(--coral-text)" }}>
                   Have a code instead?
                 </Link>
               </span>
@@ -232,13 +269,18 @@ export default function HandoverGate() {
                 }}
                 placeholder="you@email.com"
                 aria-invalid={!!error}
+                aria-describedby={error ? "join-email-error" : undefined}
               />
-              {error && <div className="field-msg">{error}</div>}
+              {error && (
+                <div id="join-email-error" className="field-msg" role="alert">
+                  {error}
+                </div>
+              )}
               <button type="submit" className="pill" style={{ justifySelf: "start" }}>
                 Continue
               </button>
-              <span className="mono" style={{ color: "var(--ink-72)", fontSize: "0.58rem" }}>
-                No password — we just link {petName}&rsquo;s care to you.
+              <span className="hint">
+                No password. We just link {petName}&rsquo;s care to you.
               </span>
             </form>
           ) : (
@@ -260,12 +302,17 @@ export default function HandoverGate() {
                 }}
                 placeholder="e.g. Alex"
                 aria-invalid={!!error}
+                aria-describedby={error ? "join-name-error" : undefined}
               />
-              {error && <div className="field-msg">{error}</div>}
+              {error && (
+                <div id="join-name-error" className="field-msg" role="alert">
+                  {error}
+                </div>
+              )}
               <button type="submit" className="pill" style={{ justifySelf: "start" }}>
                 Start helping
               </button>
-              <span className="mono" style={{ color: "var(--ink-72)", fontSize: "0.58rem" }}>
+              <span className="hint">
                 So {petName}&rsquo;s owner sees who logged each feed.
               </span>
             </form>

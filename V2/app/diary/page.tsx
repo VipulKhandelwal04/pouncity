@@ -6,18 +6,18 @@ import Link from "next/link";
 import { AppHeader } from "@/components/AppHeader";
 import { PetAvatar } from "@/components/PetAvatar";
 import { FeedingTap } from "@/components/FeedingTap";
+import { HelpingWithList } from "@/components/HelpingWithList";
 import {
   getAccount,
   signIn,
   getDiary,
   caregivingDiaries,
+  diaryCaregiver,
   ensureDemoCaregiving,
   dietStatus,
   groomingStatus,
-  shareStatus,
   completeness,
   feedingHistory,
-  isFedToday,
   isNudgeDismissed,
   setNudgeDismissed,
   type Account,
@@ -74,6 +74,9 @@ export default function DiaryHome() {
       <AppHeader account={account} />
       <main className="app-shell" style={{ paddingTop: 8 }}>
         {diary ? (
+          // Owner: "who helps" + "pets you help with" both live on the Circle
+          // (reached via the Circle card in the care group) — the hub no longer
+          // duplicates the helping-with list.
           <OwnerHubBody
             diary={diary}
             account={account}
@@ -82,14 +85,18 @@ export default function DiaryHome() {
             onDiaryChange={setDiary}
           />
         ) : (
-          <CaregiverOnlyIntro name={account?.name ?? null} />
+          // Caregiver-only: the pets they help with ARE their home — keep the
+          // list here (their home already is their circle-equivalent).
+          <>
+            <CaregiverOnlyIntro name={account?.name ?? null} />
+            {helping.length > 0 && <HelpingWith diaries={helping} />}
+            <CreateOwnPrompt />
+          </>
         )}
-        {helping.length > 0 && <HelpingWith diaries={helping} />}
-        {!diary && <CreateOwnPrompt />}
 
         {/* join another pet with a shared code */}
         <div style={{ textAlign: "center", marginTop: 8, marginBottom: 24 }}>
-          <Link href="/join" className="mono" style={{ color: "var(--coral-text)" }}>
+          <Link href="/diary/circle" className="mono" style={{ color: "var(--coral-text)" }}>
             Helping with a pet? Join with a code
           </Link>
         </div>
@@ -113,6 +120,10 @@ function OwnerHubBody({
 }) {
   const comp = completeness(diary);
   const history = feedingHistory(diary);
+  const caregiver = diaryCaregiver(diary.id);
+  const circleStatus: HubCardStatus = caregiver
+    ? { label: caregiver.name.split(" ")[0] || "Caregiver", tone: "ready" }
+    : { label: "No one yet", tone: "empty" };
   const meta = [
     diary.breed,
     diary.ageLabel,
@@ -210,7 +221,7 @@ function OwnerHubBody({
             <button
               type="button"
               onClick={onDismissNudge}
-              aria-label="Dismiss — I've done enough"
+              aria-label="Dismiss, I've done enough"
               title="Dismiss"
               style={{
                 display: "grid",
@@ -279,9 +290,9 @@ function OwnerHubBody({
         </Link>
 
         {/* care cards */}
-        <span className="mono" style={{ display: "block", marginBottom: 10 }}>
+        <h2 className="mono" style={{ display: "block", marginBottom: 10 }}>
           {diary.name}&rsquo;s care
-        </span>
+        </h2>
         <div style={{ display: "grid", gap: 12, marginBottom: 26 }}>
           <CareCard
             href="/diary/diet"
@@ -296,19 +307,19 @@ function OwnerHubBody({
             status={groomingStatus(diary)}
           />
           <CareCard
-            href="/diary/share"
-            title="Share with a sitter"
-            blurb="A standing handover link"
-            status={shareStatus(diary)}
+            href="/diary/circle"
+            title="Your Circle"
+            blurb={`Who helps with ${diary.name}, and pets you help with`}
+            status={circleStatus}
           />
         </div>
 
         {/* about — quirks + vet + records, shown once added (ticket 03) */}
         {(diary.quirks || diary.vet || desexed || diary.registered || diary.rabies) && (
           <>
-            <span className="mono" style={{ display: "block", marginBottom: 10 }}>
+            <h2 className="mono" style={{ display: "block", marginBottom: 10 }}>
               About {diary.name}
-            </span>
+            </h2>
             <div className="card" style={{ display: "grid", gap: 14, marginBottom: 26 }}>
               {diary.quirks && (
                 <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{diary.quirks}</p>
@@ -396,31 +407,10 @@ function OwnerHubBody({
 function HelpingWith({ diaries }: { diaries: Diary[] }) {
   return (
     <>
-      <span className="mono" style={{ display: "block", marginBottom: 10 }}>
+      <h2 className="mono" style={{ display: "block", marginBottom: 10 }}>
         Helping with
-      </span>
-      <div style={{ display: "grid", gap: 12, marginBottom: 26 }}>
-        {diaries.map((d) => (
-          <Link
-            key={d.id}
-            href={`/care/${d.id}`}
-            className="card"
-            style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px" }}
-          >
-            <PetAvatar species={d.species} photoUrl={d.photoUrl} name={d.name} size={46} />
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <strong style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "1.05rem" }}>
-                {d.name}
-              </strong>
-              <span style={{ display: "block", color: "var(--ink-72)", fontSize: "0.85rem", marginTop: 2 }}>
-                {d.breed} · {isFedToday(d) ? "fed today" : "not fed yet"}
-              </span>
-            </span>
-            {d.demo && <Chip>Demo</Chip>}
-            <Chevron />
-          </Link>
-        ))}
-      </div>
+      </h2>
+      <HelpingWithList diaries={diaries} />
     </>
   );
 }
@@ -430,7 +420,7 @@ function CaregiverOnlyIntro({ name }: { name: string | null }) {
     <section style={{ margin: "12px 0 24px" }}>
       <h1 style={{ fontSize: "clamp(1.7rem, 7vw, 2.2rem)" }}>Hi{name ? `, ${name}` : ""}</h1>
       <p style={{ color: "var(--ink-72)", marginTop: 8, lineHeight: 1.55 }}>
-        Here are the pets you help with. You don&rsquo;t have your own diary yet — start
+        Here are the pets you help with. You don&rsquo;t have your own diary yet. Start
         one whenever you like.
       </p>
     </section>
@@ -470,7 +460,7 @@ function CreateOwnPrompt() {
           Create your own pet&rsquo;s diary
         </strong>
         <span style={{ display: "block", color: "var(--ink-72)", fontSize: "0.85rem", marginTop: 2 }}>
-          Start a diary for a pet you own — feeding, plans and sharing.
+          Start a diary for a pet you own: feeding, plans and sharing.
         </span>
       </span>
       <Chevron />

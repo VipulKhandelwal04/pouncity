@@ -80,7 +80,7 @@ export default function CaregiverView() {
           >
             <h1 style={{ fontSize: "1.5rem", marginBottom: 8 }}>Access ended</h1>
             <p style={{ color: "var(--ink-72)" }}>
-              This pet isn&rsquo;t shared with you right now — the owner may have turned the
+              This pet isn&rsquo;t shared with you right now. The owner may have turned the
               link off. If you&rsquo;re still helping out, ask them for a fresh one.
             </p>
           </div>
@@ -136,9 +136,9 @@ export default function CaregiverView() {
         />
 
         {/* recent feeding — read-only, last few days (not the owner's full calendar) */}
-        <span className="mono" style={{ display: "block", marginBottom: 10 }}>
+        <h2 className="mono" style={{ display: "block", marginBottom: 10 }}>
           Recent feeding
-        </span>
+        </h2>
         <div className="card" style={{ marginBottom: 26 }}>
           {history.length === 0 ? (
             <p style={{ color: "var(--ink-72)", fontSize: "0.9rem" }}>
@@ -181,9 +181,9 @@ export default function CaregiverView() {
         {/* diet plan — read-only */}
         {plan && (
           <>
-            <span className="mono" style={{ display: "block", marginBottom: 10 }}>
+            <h2 className="mono" style={{ display: "block", marginBottom: 10 }}>
               Diet plan
-            </span>
+            </h2>
             <div className="card" style={{ marginBottom: 26, display: "grid", gap: 14 }}>
               <p style={{ lineHeight: 1.55 }}>{plan.summary}</p>
               <div style={{ borderTop: "var(--border-thin)", paddingTop: 14, display: "grid", gap: 8 }}>
@@ -210,9 +210,9 @@ export default function CaregiverView() {
         {/* grooming guide — read-only */}
         {groom && (
           <>
-            <span className="mono" style={{ display: "block", marginBottom: 10 }}>
+            <h2 className="mono" style={{ display: "block", marginBottom: 10 }}>
               Grooming guide
-            </span>
+            </h2>
             <div className="card" style={{ marginBottom: 26, display: "grid", gap: 14 }}>
               <p style={{ lineHeight: 1.55 }}>{groom.summary}</p>
               <div style={{ borderTop: "var(--border-thin)", paddingTop: 14, display: "grid", gap: 8 }}>
@@ -243,9 +243,9 @@ export default function CaregiverView() {
         {/* quirks — read-only */}
         {diary.quirks && (
           <>
-            <span className="mono" style={{ display: "block", marginBottom: 10 }}>
+            <h2 className="mono" style={{ display: "block", marginBottom: 10 }}>
               Good to know
-            </span>
+            </h2>
             <div className="card" style={{ marginBottom: 26 }}>
               <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{diary.quirks}</p>
             </div>
@@ -255,9 +255,9 @@ export default function CaregiverView() {
         {/* vet — read-only, reachable fast */}
         {diary.vet && (
           <>
-            <span className="mono" style={{ display: "block", marginBottom: 10 }}>
+            <h2 className="mono" style={{ display: "block", marginBottom: 10 }}>
               Vet
-            </span>
+            </h2>
             <div className="card" style={{ marginBottom: 26 }}>
               <strong style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}>
                 {diary.vet.name || diary.vet.clinic || "Vet contact"}

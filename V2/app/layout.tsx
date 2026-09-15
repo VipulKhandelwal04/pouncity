@@ -22,7 +22,7 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pouncity — your pet's diary",
+  title: "Pouncity: your pet's diary",
   description: "The one living record for your pet, ready to hand to any sitter.",
 };
 

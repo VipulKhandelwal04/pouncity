@@ -118,7 +118,7 @@ export default function FeedingDiaryPage() {
                   style={{ aspectRatio: "1", display: "grid", placeItems: "center", position: "relative" }}
                 >
                   <span
-                    title={fed ? `Fed by ${entry?.by}${entry?.note ? ` — ${entry.note}` : ""}` : undefined}
+                    title={fed ? `Fed by ${entry?.by}${entry?.note ? ` · ${entry.note}` : ""}` : undefined}
                     style={{
                       width: "82%",
                       aspectRatio: "1",

@@ -336,13 +336,39 @@ export async function getAccount(): Promise<Account | null> {
   return account;
 }
 
-/** Send a passwordless sign-in link to this email; lands on /auth/callback. */
+/**
+ * Send a passwordless sign-in email to this address. The same one-time request
+ * backs two ways in: the clickable link (lands on /auth/callback) and a 6-digit
+ * code the visitor can type instead — see `verifyEmailCode`. Which of the two
+ * the email shows is controlled by the Supabase "Magic Link" template
+ * (`{{ .ConfirmationURL }}` for the link, `{{ .Token }}` for the code); include
+ * both to offer both. `emailRedirectTo` is kept so the link path still works.
+ */
 export async function requestMagicLink(email: string, next = "/diary"): Promise<void> {
   const supabase = supabaseBrowser();
   const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
   const { error } = await supabase.auth.signInWithOtp({
     email: email.trim(),
     options: { emailRedirectTo: redirectTo },
+  });
+  if (error) throw error;
+}
+
+/**
+ * Verify the 6-digit code from the sign-in email and establish the session in
+ * this browser. This is the cross-device path (start on a laptop, read the code
+ * on a phone) and the fallback when a link is mangled by an in-app browser —
+ * unlike the PKCE link, the code is not bound to the device that requested it.
+ * On success `createBrowserClient` writes the session cookie, so middleware and
+ * server components see the signed-in user on the next navigation. Throws on a
+ * wrong or expired code so the screen can prompt a retry / resend.
+ */
+export async function verifyEmailCode(email: string, token: string): Promise<void> {
+  const supabase = supabaseBrowser();
+  const { error } = await supabase.auth.verifyOtp({
+    email: email.trim(),
+    token: token.trim(),
+    type: "email",
   });
   if (error) throw error;
 }

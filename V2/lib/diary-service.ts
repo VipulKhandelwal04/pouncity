@@ -13,7 +13,37 @@
  *   - diet / grooming generation requests            [tickets 04, 06]
  *   - the feeding confirm (idempotent daily)         [ticket 05]
  *   - handover-link lifecycle + caregiver binding    [tickets 07-09]
+ *
+ * Ticket 01 (async seam prefactor): every function that touches storage is
+ * async / Promise-returning, so the later backend tickets swap a function
+ * body (localStorage -> Supabase query) with zero call-site churn. Pure
+ * derived-view helpers that operate on an already-loaded Diary/value with no
+ * I/O (isFedToday, dietStatus, completeness, handoverReadiness, the templated
+ * generateDietPlan/generateGroomingGuide, handoverCode, ...) deliberately stay
+ * synchronous — they never touch storage even after the backend lands, and
+ * forcing them async would only make every inline JSX use of them (e.g.
+ * `{dietStatus(diary).label}`) clumsier for no real benefit. This is a
+ * judgment call on an otherwise-blanket "every exported function returns a
+ * Promise" instruction in the ticket text; noting it here rather than
+ * silently picking a side.
+ *
+ * Ticket 02 (real auth + core persistence): Account, Diary (core + optional
+ * fields), and ownership (Membership role='owner') are now backed by
+ * Supabase — Postgres + Auth + the pet-photos/rabies-certificates Storage
+ * buckets. Sign-in is real (email magic link, Google), scoped by
+ * `V2/supabase/migrations/0002_account_diary_membership.sql`. Everything
+ * downstream of a Diary that its OWN ticket hasn't landed yet — diet plan,
+ * grooming guide, feeding log, the handover link, Caregiver membership,
+ * Past Caregiver, Rating — still lives in the same localStorage mock as
+ * before (tickets 03-06). `getDiaryById`/`getDiary` merge the two: Supabase
+ * is the source of truth for a real diary's core fields; a localStorage
+ * "shadow" entry under the same diary id supplies whatever those later
+ * tickets haven't moved yet. This keeps every existing flow working
+ * unchanged in the same session while the core identity genuinely persists
+ * cross-device, which is what this ticket's acceptance criteria ask for.
  */
+
+import { supabaseBrowser } from "./supabase/client";
 
 export type Species = "dog" | "cat";
 
@@ -157,6 +187,11 @@ const MEMBERSHIPS_KEY = "pouncity_memberships_v1";
 const PAST_CAREGIVERS_KEY = "pouncity_past_caregivers_v1"; // ADR-0006: retained on revoke
 const RATINGS_KEY = "pouncity_ratings_v1"; // private owner→caregiver feedback
 const NUDGE_KEY = "pouncity_nudge_dismissed_v1";
+// An anonymous per-browser fingerprint (ticket 04) so the public handover
+// route can dedupe repeat opens from the same visitor, before they have an
+// account. Never tied to identity beyond "the same browser opened this link
+// more than once".
+const RECIPIENT_KEY = "pouncity_recipient_key_v1";
 const FEED_REMINDERS_KEY = "pouncity_feed_reminders_v1"; // { [diaryId]: boolean }
 const GROOM_REMINDER_KEY = "pouncity_groom_reminder_v1";
 
@@ -266,89 +301,244 @@ function writeDiary(diary: Diary): void {
   write(DIARIES_KEY, all);
 }
 
-/* ---- accounts (mock auth) ----------------------------------------------- */
-
-/** The signed-in account, or null when signed out. `name` is "" until captured. */
-export function getAccount(): Account | null {
-  ensureMigrated();
-  const id = read<string>(CURRENT_ACCOUNT_KEY);
-  if (!id) return null;
-  return readAccounts()[id] ?? null;
-}
+/* ---- accounts (Supabase Auth, ticket 02) --------------------------------- */
 
 /**
- * Sign in by email. Reattaches to the existing account for that email (keeping
- * its id, name, and memberships) rather than minting a new identity — so
- * sign-out → sign-in returns to the same pet. Only a genuinely new email mints
- * a fresh account (name empty, to be captured).
+ * Mirror a real Supabase account into the legacy local accounts registry, so
+ * the caregiver/handover/rating functions below — not yet migrated off
+ * localStorage (tickets 03-06) — can keep resolving an account id to a
+ * name/email exactly as before. Safe to delete once ticket 06 moves Caregiver
+ * membership onto Supabase too.
  */
-export function signIn(email: string): Account {
-  ensureMigrated();
-  const clean = email.trim();
+function mirrorAccount(account: Account): void {
   const accounts = readAccounts();
-  const existing = Object.values(accounts).find(
-    (a) => a.email.toLowerCase() === clean.toLowerCase()
-  );
-  const account: Account = existing ?? {
-    id: "a_" + Math.random().toString(36).slice(2, 9),
-    name: "",
-    email: clean,
-  };
   accounts[account.id] = account;
   write(ACCOUNTS_KEY, accounts);
-  write(CURRENT_ACCOUNT_KEY, account.id);
+}
+
+/** The signed-in account, or null when signed out. `name` is "" until captured. */
+export async function getAccount(): Promise<Account | null> {
+  ensureMigrated();
+  const supabase = supabaseBrowser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("account")
+    .select("id,name,email")
+    .eq("id", user.id)
+    .maybeSingle();
+  // The account row is created by a DB trigger on signup; if it hasn't landed
+  // yet (a rare race right after first sign-in), fall back to the session.
+  const account: Account = data ?? { id: user.id, name: "", email: user.email ?? "" };
+  mirrorAccount(account);
   return account;
 }
 
-/** Capture / change the current account's display name (used for attribution). */
-export function setAccountName(name: string): Account | null {
-  const cur = getAccount();
-  if (!cur) return null;
-  const accounts = readAccounts();
-  const next: Account = { ...cur, name: name.trim() };
-  accounts[next.id] = next;
-  write(ACCOUNTS_KEY, accounts);
-  return next;
+/** Send a passwordless sign-in link to this email; lands on /auth/callback. */
+export async function requestMagicLink(email: string, next = "/diary"): Promise<void> {
+  const supabase = supabaseBrowser();
+  const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+  const { error } = await supabase.auth.signInWithOtp({
+    email: email.trim(),
+    options: { emailRedirectTo: redirectTo },
+  });
+  if (error) throw error;
 }
 
-/** Sign out clears only the current-account pointer; the registry survives. */
-export function signOut(): void {
-  if (!hasWindow()) return;
-  try {
-    window.localStorage.removeItem(CURRENT_ACCOUNT_KEY);
-  } catch {
-    /* ignore */
-  }
+/** Start a Google OAuth sign-in; lands on /auth/callback. */
+export async function signInWithGoogle(next = "/diary"): Promise<void> {
+  const supabase = supabaseBrowser();
+  const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
+  });
+  if (error) throw error;
+}
+
+/** Capture / change the current account's display name (used for attribution). */
+export async function setAccountName(name: string): Promise<Account | null> {
+  const supabase = supabaseBrowser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const clean = name.trim();
+  const { data } = await supabase
+    .from("account")
+    .update({ name: clean })
+    .eq("id", user.id)
+    .select("id,name,email")
+    .maybeSingle();
+  if (!data) return null;
+  mirrorAccount(data as Account);
+  return data as Account;
+}
+
+/** Sign out of the real Supabase session. */
+export async function signOut(): Promise<void> {
+  const supabase = supabaseBrowser();
+  await supabase.auth.signOut();
 }
 
 /* ---- memberships (per-diary roles) -------------------------------------- */
 
 /** Memberships for the signed-in account (owner and/or caregiver, per diary). */
-export function getMemberships(): Membership[] {
-  const acct = getAccount();
+export async function getMemberships(): Promise<Membership[]> {
+  const acct = await getAccount();
   if (!acct) return [];
-  return readMemberships().filter((m) => m.accountId === acct.id);
+  const supabase = supabaseBrowser();
+  const { data } = await supabase
+    .from("membership")
+    .select("account_id,diary_id,role")
+    .eq("account_id", acct.id);
+  const owned: Membership[] = (data ?? []).map((m) => ({
+    accountId: m.account_id,
+    diaryId: m.diary_id,
+    role: m.role as Role,
+  }));
+  const caregiverMock = readMemberships().filter(
+    (m) => m.accountId === acct.id && m.role === "caregiver"
+  );
+  return [...owned, ...caregiverMock];
 }
 
-/** The diary this account owns (the owner-app has exactly one), or null. */
-function ownedDiaryId(accountId: string): string | null {
-  const m = readMemberships().find((x) => x.accountId === accountId && x.role === "owner");
-  return m?.diaryId ?? null;
+/** The diary id this account owns (the owner-app has exactly one), or null. */
+async function ownedDiaryId(): Promise<string | null> {
+  const supabase = supabaseBrowser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("membership")
+    .select("diary_id")
+    .eq("account_id", user.id)
+    .eq("role", "owner")
+    .maybeSingle();
+  return data?.diary_id ?? null;
 }
 
-/* ---- diary read/write --------------------------------------------------- */
+/* ---- diary read/write (Supabase, ticket 02) ------------------------------ */
+
+/** A raw `data:` URL from a freshly-picked file, vs. an already-stored one. */
+function isDataUrl(v: string | null): boolean {
+  return !!v && v.startsWith("data:");
+}
+
+function dataUrlToBlob(dataUrl: string): { blob: Blob; contentType: string; ext: string } {
+  const [header, base64] = dataUrl.split(",");
+  const contentType = header.slice(5, header.indexOf(";"));
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const ext = contentType === "application/pdf" ? "pdf" : contentType.split("/")[1] || "jpg";
+  return { blob: new Blob([bytes], { type: contentType }), contentType, ext };
+}
+
+/**
+ * Resolve a form field's photo/certificate value into a Storage path to save.
+ * Returns `undefined` when the value is just the already-resolved URL echoed
+ * back unchanged (no upload needed), `null` for an explicit removal, or the
+ * new object's path after uploading a freshly-picked `data:` URL.
+ */
+async function resolveUpload(
+  bucket: "pet-photos" | "rabies-certificates",
+  diaryId: string,
+  value: string | null
+): Promise<string | null | undefined> {
+  if (value === null) return null;
+  if (!isDataUrl(value)) return undefined;
+  const { blob, contentType, ext } = dataUrlToBlob(value);
+  const path = `${diaryId}/${bucket === "pet-photos" ? "photo" : "certificate"}.${ext}`;
+  const supabase = supabaseBrowser();
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(path, blob, { contentType, upsert: true });
+  if (error) throw error;
+  return path;
+}
+
+async function resolveReadUrl(
+  bucket: "pet-photos" | "rabies-certificates",
+  path: string
+): Promise<string> {
+  const supabase = supabaseBrowser();
+  if (bucket === "pet-photos") {
+    return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+  }
+  const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+  return data?.signedUrl ?? "";
+}
+
+type DiaryRow = {
+  id: string;
+  name: string;
+  species: Species;
+  breed: string;
+  age_label: string;
+  weight_kg: number | null;
+  photo_url: string | null;
+  quirks: string | null;
+  vet_name: string | null;
+  vet_phone: string | null;
+  vet_clinic: string | null;
+  neuter_status: NeuterStatus;
+  registered: boolean;
+  rabies_vaccinated: boolean;
+  rabies_certificate_url: string | null;
+  rabies_expiry: string | null;
+  current_food: string | null;
+  coat_type: string | null;
+  created_at: string;
+};
+
+/** Map a `diary` table row to the seam's Diary shape (core fields only — the
+ *  caller overlays whatever tickets 03/04/07/08 haven't moved off the mock). */
+async function mapDiaryRow(row: DiaryRow): Promise<Diary> {
+  const photoUrl = row.photo_url ? await resolveReadUrl("pet-photos", row.photo_url) : null;
+  const certUrl = row.rabies_certificate_url
+    ? await resolveReadUrl("rabies-certificates", row.rabies_certificate_url)
+    : null;
+  return {
+    id: row.id,
+    name: row.name,
+    species: row.species,
+    breed: row.breed,
+    ageLabel: row.age_label,
+    weightKg: row.weight_kg,
+    photoUrl,
+    quirks: row.quirks,
+    vet:
+      row.vet_name || row.vet_phone || row.vet_clinic
+        ? { name: row.vet_name ?? "", phone: row.vet_phone ?? "", clinic: row.vet_clinic ?? "" }
+        : null,
+    neuterStatus: row.neuter_status,
+    registered: row.registered,
+    rabies: row.rabies_vaccinated
+      ? { certificateUrl: certUrl, expiry: row.rabies_expiry }
+      : null,
+    currentFood: row.current_food,
+    coatType: row.coat_type,
+    dietPlan: null,
+    groomingGuide: null,
+    feedingLog: [],
+    handover: { token: null, createdAt: null },
+    createdAt: row.created_at,
+  };
+}
 
 /** The signed-in owner's pet diary, or null before they've created it (→ /create). */
-export function getDiary(): Diary | null {
-  const acct = getAccount();
-  if (!acct) return null;
-  const id = ownedDiaryId(acct.id);
+export async function getDiary(): Promise<Diary | null> {
+  const id = await ownedDiaryId();
   if (!id) return null;
-  return readDiaries()[id] ?? null;
+  return getDiaryById(id);
 }
 
-export function hasDiary(): boolean {
-  return getDiary() !== null;
+export async function hasDiary(): Promise<boolean> {
+  return (await getDiary()) !== null;
 }
 
 /** The core fields the create/edit form collects. */
@@ -362,41 +552,81 @@ export interface DiaryCore {
 }
 
 /** Create the owner's diary and bind them to it as owner. Requires an account. */
-export function createDiary(core: DiaryCore): Diary {
-  const acct = getAccount() ?? signIn("you@pouncity.app");
-  const diary: Diary = {
-    id: "d_" + Math.random().toString(36).slice(2, 9),
-    ...core,
-    quirks: null,
-    vet: null,
-    neuterStatus: "none",
-    registered: false,
-    rabies: null,
-    currentFood: null,
-    coatType: null,
-    dietPlan: null,
-    groomingGuide: null,
-    feedingLog: [],
-    handover: { token: null, createdAt: null },
-    createdAt: new Date().toISOString(),
-  };
-  writeDiary(diary);
-  const memberships = readMemberships();
-  if (!memberships.some((m) => m.accountId === acct.id && m.diaryId === diary.id)) {
-    memberships.push({ accountId: acct.id, diaryId: diary.id, role: "owner" });
-    write(MEMBERSHIPS_KEY, memberships);
+export async function createDiary(core: DiaryCore): Promise<Diary> {
+  const supabase = supabaseBrowser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Sign in first.");
+
+  const { data: row, error } = await supabase
+    .from("diary")
+    .insert({
+      name: core.name,
+      species: core.species,
+      breed: core.breed,
+      age_label: core.ageLabel,
+      weight_kg: core.weightKg,
+    })
+    .select()
+    .single();
+  if (error || !row) throw error ?? new Error("Could not create the diary.");
+
+  const { error: memErr } = await supabase
+    .from("membership")
+    .insert({ account_id: user.id, diary_id: row.id, role: "owner" });
+  if (memErr) throw memErr;
+
+  if (core.photoUrl) {
+    const path = await resolveUpload("pet-photos", row.id, core.photoUrl);
+    if (path) await supabase.from("diary").update({ photo_url: path }).eq("id", row.id);
   }
+
   write(NUDGE_KEY, false); // fresh pet → an active completeness nudge
-  return diary;
+  return (await getDiaryById(row.id))!;
 }
 
 /** Merge a patch into the existing diary (edit); null if none exists yet. */
-export function updateDiary(patch: Partial<Diary>): Diary | null {
-  const cur = getDiary();
+export async function updateDiary(patch: Partial<Diary>): Promise<Diary | null> {
+  const cur = await getDiary();
   if (!cur) return null;
-  const next = { ...cur, ...patch };
-  writeDiary(next);
-  return next;
+  const supabase = supabaseBrowser();
+
+  const updates: Record<string, unknown> = {};
+  if (patch.name !== undefined) updates.name = patch.name;
+  if (patch.species !== undefined) updates.species = patch.species;
+  if (patch.breed !== undefined) updates.breed = patch.breed;
+  if (patch.ageLabel !== undefined) updates.age_label = patch.ageLabel;
+  if (patch.weightKg !== undefined) updates.weight_kg = patch.weightKg;
+  if (patch.quirks !== undefined) updates.quirks = patch.quirks;
+  if (patch.vet !== undefined) {
+    updates.vet_name = patch.vet?.name ?? null;
+    updates.vet_phone = patch.vet?.phone ?? null;
+    updates.vet_clinic = patch.vet?.clinic ?? null;
+  }
+  if (patch.neuterStatus !== undefined) updates.neuter_status = patch.neuterStatus;
+  if (patch.registered !== undefined) updates.registered = patch.registered;
+  if (patch.currentFood !== undefined) updates.current_food = patch.currentFood;
+  if (patch.coatType !== undefined) updates.coat_type = patch.coatType;
+
+  if (patch.photoUrl !== undefined) {
+    const resolved = await resolveUpload("pet-photos", cur.id, patch.photoUrl);
+    if (resolved !== undefined) updates.photo_url = resolved;
+  }
+  if (patch.rabies !== undefined) {
+    updates.rabies_vaccinated = patch.rabies != null;
+    updates.rabies_expiry = patch.rabies?.expiry ?? null;
+    const resolved = await resolveUpload(
+      "rabies-certificates",
+      cur.id,
+      patch.rabies?.certificateUrl ?? null
+    );
+    if (resolved !== undefined) updates.rabies_certificate_url = resolved;
+  }
+
+  const { error } = await supabase.from("diary").update(updates).eq("id", cur.id);
+  if (error) throw error;
+  return getDiaryById(cur.id);
 }
 
 /* ---- feeding confirm (diary-id-addressed) ------------------------------- */
@@ -408,17 +638,37 @@ export function updateDiary(patch: Partial<Diary>): Diary | null {
  * so the owner path is unchanged. Every write still goes through writeDiary.
  */
 
-/** Today's confirm, if one exists (there is at most one per day). */
+/** Today's confirm, if one exists (there is at most one per day). Pure — no I/O. */
 export function todayEntry(diary: Diary): FeedingEntry | undefined {
   const t = today();
   return diary.feedingLog.find((e) => e.date === t);
 }
 
 /** Idempotent confirm on a specific diary — the first confirm of the day wins. */
-export function confirmFeedingFor(diaryId: string, by: string): Diary | null {
-  const cur = getDiaryById(diaryId);
+export async function confirmFeedingFor(diaryId: string, by: string): Promise<Diary | null> {
+  const cur = await getDiaryById(diaryId);
   if (!cur) return null;
   if (todayEntry(cur)) return cur;
+
+  if (await realMembershipRole(diaryId)) {
+    const supabase = supabaseBrowser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      const { error } = await supabase.from("feeding_entry").insert({
+        diary_id: diaryId,
+        fed_on: today(),
+        by_account_id: user.id,
+        by_name: by,
+      });
+      // Idempotent per (diary_id, fed_on) — a duplicate insert from a second
+      // tap/device is expected and not an error.
+      if (error && error.code !== "23505") throw error;
+      return getDiaryById(diaryId);
+    }
+  }
+
   const next: Diary = {
     ...cur,
     feedingLog: [...cur.feedingLog, { date: today(), by }],
@@ -428,10 +678,22 @@ export function confirmFeedingFor(diaryId: string, by: string): Diary | null {
 }
 
 /** Reverse today's confirm on a specific diary (same-day mistap). */
-export function undoFeedingFor(diaryId: string): Diary | null {
-  const cur = getDiaryById(diaryId);
+export async function undoFeedingFor(diaryId: string): Promise<Diary | null> {
+  const cur = await getDiaryById(diaryId);
   if (!cur) return null;
   const t = today();
+
+  if (await realMembershipRole(diaryId)) {
+    const supabase = supabaseBrowser();
+    const { error } = await supabase
+      .from("feeding_entry")
+      .delete()
+      .eq("diary_id", diaryId)
+      .eq("fed_on", t);
+    if (error) throw error;
+    return getDiaryById(diaryId);
+  }
+
   const next: Diary = {
     ...cur,
     feedingLog: cur.feedingLog.filter((e) => e.date !== t),
@@ -441,11 +703,23 @@ export function undoFeedingFor(diaryId: string): Diary | null {
 }
 
 /** Attach/clear the optional deviation note on today's confirm of a diary. */
-export function setTodayNoteFor(diaryId: string, note: string): Diary | null {
-  const cur = getDiaryById(diaryId);
+export async function setTodayNoteFor(diaryId: string, note: string): Promise<Diary | null> {
+  const cur = await getDiaryById(diaryId);
   if (!cur) return null;
   const t = today();
   const trimmed = note.trim();
+
+  if (await realMembershipRole(diaryId)) {
+    const supabase = supabaseBrowser();
+    const { error } = await supabase
+      .from("feeding_entry")
+      .update({ note: trimmed || null })
+      .eq("diary_id", diaryId)
+      .eq("fed_on", t);
+    if (error) throw error;
+    return getDiaryById(diaryId);
+  }
+
   const next: Diary = {
     ...cur,
     feedingLog: cur.feedingLog.map((e) =>
@@ -456,7 +730,7 @@ export function setTodayNoteFor(diaryId: string, note: string): Diary | null {
   return next;
 }
 
-/** Confirms, most recent first. */
+/** Confirms, most recent first. Pure — no I/O. */
 export function feedingHistory(diary: Diary): FeedingEntry[] {
   return [...diary.feedingLog].sort((a, b) => b.date.localeCompare(a.date));
 }
@@ -474,14 +748,14 @@ function readFeedReminders(): Record<string, boolean> {
   return read<Record<string, boolean>>(FEED_REMINDERS_KEY) ?? {};
 }
 
-export function getFeedReminderFor(diaryId: string): boolean {
-  const acct = getAccount();
+export async function getFeedReminderFor(diaryId: string): Promise<boolean> {
+  const acct = await getAccount();
   if (!acct) return false;
   return readFeedReminders()[reminderKey(acct.id, diaryId)] === true;
 }
 
-export function setFeedReminderFor(diaryId: string, on: boolean): void {
-  const acct = getAccount();
+export async function setFeedReminderFor(diaryId: string, on: boolean): Promise<void> {
+  const acct = await getAccount();
   if (!acct) return;
   const all = readFeedReminders();
   all[reminderKey(acct.id, diaryId)] = on;
@@ -489,8 +763,8 @@ export function setFeedReminderFor(diaryId: string, on: boolean): void {
 }
 
 /** The reminder condition ticket 09/backend will consume: opted in AND not fed. */
-export function feedReminderDue(diary: Diary): boolean {
-  return getFeedReminderFor(diary.id) && !isFedToday(diary);
+export async function feedReminderDue(diary: Diary): Promise<boolean> {
+  return (await getFeedReminderFor(diary.id)) && !isFedToday(diary);
 }
 
 /* ---- diet plan (ticket 04) ---------------------------------------------- */
@@ -499,6 +773,8 @@ export function feedReminderDue(diary: Diary): boolean {
  * The AI generation boundary — a pure function of the diary + current food.
  * Canned/templated now; later the diet-service's insides call the AI Gateway
  * and return the same DietPlan shape. The UI never asserts on the *content*.
+ * Pure — no I/O — kept synchronous; requestDietPlan (I/O) calls this and,
+ * per ticket 07, will keep calling it as the AI-unavailable fallback.
  */
 export function generateDietPlan(diary: Diary, currentFood: string): DietPlan {
   const w = diary.weightKg ?? (diary.species === "dog" ? 15 : 4);
@@ -521,8 +797,8 @@ export function generateDietPlan(diary: Diary, currentFood: string): DietPlan {
   };
 }
 
-export function requestDietPlan(currentFood: string): Diary | null {
-  const cur = getDiary();
+export async function requestDietPlan(currentFood: string): Promise<Diary | null> {
+  const cur = await getDiary();
   if (!cur) return null;
   const plan = generateDietPlan(cur, currentFood);
   const next: Diary = { ...cur, currentFood: plan.currentFood, dietPlan: plan };
@@ -531,14 +807,14 @@ export function requestDietPlan(currentFood: string): Diary | null {
 }
 
 /** The manual alternative to AI generation — the owner writes the plan themselves. */
-export function saveDietPlan(fields: {
+export async function saveDietPlan(fields: {
   currentFood: string;
   portionPerDay: string;
   meals: string;
   summary?: string;
   tips?: string[];
-}): Diary | null {
-  const cur = getDiary();
+}): Promise<Diary | null> {
+  const cur = await getDiary();
   if (!cur) return null;
   const food = fields.currentFood.trim() || `a complete ${cur.species} food`;
   const plan: DietPlan = {
@@ -556,6 +832,7 @@ export function saveDietPlan(fields: {
 
 /* ---- grooming guide (ticket 06) ----------------------------------------- */
 
+/** Pure — no I/O — same fallback-generator reasoning as generateDietPlan. */
 export function generateGroomingGuide(diary: Diary, coatType: string): GroomingGuide {
   const coat =
     coatType.trim() || (diary.species === "dog" ? "medium double coat" : "short coat");
@@ -589,8 +866,8 @@ export function generateGroomingGuide(diary: Diary, coatType: string): GroomingG
   };
 }
 
-export function requestGroomingGuide(coatType: string): Diary | null {
-  const cur = getDiary();
+export async function requestGroomingGuide(coatType: string): Promise<Diary | null> {
+  const cur = await getDiary();
   if (!cur) return null;
   const guide = generateGroomingGuide(cur, coatType);
   const next: Diary = { ...cur, coatType: guide.coatType, groomingGuide: guide };
@@ -599,14 +876,14 @@ export function requestGroomingGuide(coatType: string): Diary | null {
 }
 
 /** The manual alternative to AI generation — the owner writes the guide themselves. */
-export function saveGroomingGuide(fields: {
+export async function saveGroomingGuide(fields: {
   coatType: string;
   frequencyWeeks: number;
   routine?: string[];
   professional?: string;
   summary?: string;
-}): Diary | null {
-  const cur = getDiary();
+}): Promise<Diary | null> {
+  const cur = await getDiary();
   if (!cur) return null;
   const coat = fields.coatType.trim() || (cur.species === "dog" ? "medium coat" : "short coat");
   const freq =
@@ -627,35 +904,39 @@ export function saveGroomingGuide(fields: {
   return next;
 }
 
-export function getGroomReminder(): boolean {
+export async function getGroomReminder(): Promise<boolean> {
   return read<boolean>(GROOM_REMINDER_KEY) === true;
 }
 
-export function setGroomReminder(on: boolean): void {
+export async function setGroomReminder(on: boolean): Promise<void> {
   write(GROOM_REMINDER_KEY, on);
 }
 
-/* ---- handover link (tickets 07-09) -------------------------------------- */
+/* ---- handover link (ticket 04: real; ticket 05 adds revoke's Past Caregiver retention) --- */
 
 /** Issue a fresh standing link token (owner action; the old one dies). */
-export function regenerateHandoverLink(): Diary | null {
-  const cur = getDiary();
+export async function regenerateHandoverLink(): Promise<Diary | null> {
+  const cur = await getDiary();
   if (!cur) return null;
+  const supabase = supabaseBrowser();
+  // One live link per pet — revoke whatever's active before issuing the new one.
+  await supabase
+    .from("handover_token")
+    .update({ state: "revoked", revoked_at: new Date().toISOString() })
+    .eq("diary_id", cur.id)
+    .eq("state", "active");
   const token = "h_" + Math.random().toString(36).slice(2, 12);
-  const next: Diary = {
-    ...cur,
-    handover: {
-      token,
-      createdAt: new Date().toISOString(),
-    },
-  };
-  writeDiary(next);
-  return next;
+  const referralCode = handoverCode(token).replace(/-/g, "").toLowerCase();
+  const { error } = await supabase
+    .from("handover_token")
+    .insert({ diary_id: cur.id, token, referral_code: referralCode, state: "active" });
+  if (error) throw error;
+  return getDiaryById(cur.id);
 }
 
 /** Generate a link only if none exists yet. */
-export function ensureHandoverLink(): Diary | null {
-  const cur = getDiary();
+export async function ensureHandoverLink(): Promise<Diary | null> {
+  const cur = await getDiary();
   if (!cur) return null;
   return cur.handover.token ? cur : regenerateHandoverLink();
 }
@@ -675,6 +956,7 @@ export interface HandoverReadiness {
  * gate link creation, name the gaps, and link straight to the right page. These
  * already exist on the Diary shape — validation + a completion prompt, not a
  * schema change — and it is called ONLY at handover creation / regeneration.
+ * Pure — no I/O — operates on an already-loaded Diary.
  *
  * ⚠️ Model limitation: `rabies` is null both when a pet is not vaccinated AND
  * when it has not been recorded, so "rabies status" here means "a rabies record
@@ -699,26 +981,40 @@ export interface HandoverTarget {
   petName: string;
 }
 
+/** A stable-per-browser anonymous id, so the public route can dedupe repeat opens. */
+function recipientKey(): string {
+  if (!hasWindow()) return "unknown";
+  let id = read<string>(RECIPIENT_KEY);
+  if (!id) {
+    id = "r_" + Math.random().toString(36).slice(2, 12);
+    write(RECIPIENT_KEY, id);
+  }
+  return id;
+}
+
 /**
- * Resolve a handover token (or referral code — slice 06) to only the pet's id
- * and name, or null if the token is unknown / revoked. This deliberately does
- * NOT return the diary: under ADR-0004 no diary content is readable without an
- * account, so the gate physically cannot leak it. Callers that hold a membership
- * read the diary by id via getDiaryById / the caregiver view (slices 03-04).
+ * Resolve a handover token to only the pet's id and name, or null if unknown
+ * / revoked (ticket 04) — via the public, service-role /api/handover route,
+ * the ONE capability that genuinely needs no account and no session (ADR-0003).
+ * Deliberately does NOT return the diary: under ADR-0004 no diary content is
+ * readable without an account, so this route physically cannot leak it.
+ * Callers that hold a membership read the diary by id via getDiaryById / the
+ * caregiver view. Also records this visit as a handover_open server-side.
  */
-export function resolveHandoverGate(token: string): HandoverTarget | null {
-  ensureMigrated();
+export async function resolveHandoverGate(token: string): Promise<HandoverTarget | null> {
   if (!token) return null;
-  const match = Object.values(readDiaries()).find(
-    (d) => d.handover.token && d.handover.token === token
+  const res = await fetch(
+    `/api/handover?token=${encodeURIComponent(token)}&recipient=${encodeURIComponent(recipientKey())}`
   );
-  return match ? { diaryId: match.id, petName: match.name } : null;
+  if (!res.ok) return null;
+  const { target } = (await res.json()) as { target: HandoverTarget | null };
+  return target;
 }
 
 /**
  * The human-readable Referral code for a link — the SAME token, just formatted
  * to read aloud (grouped, upper-case, no `h_` prefix). Not a second credential:
- * regenerate/revoke change the token and the code changes with it.
+ * regenerate/revoke change the token and the code changes with it. Pure — no I/O.
  */
 export function handoverCode(token: string | null): string {
   if (!token) return "";
@@ -726,37 +1022,119 @@ export function handoverCode(token: string | null): string {
   return core.replace(/(.{4})(?=.)/g, "$1-");
 }
 
-/** Resolve a typed Referral code (any spacing/case) back to its link token, or null. */
-export function resolveCode(code: string): string | null {
-  ensureMigrated();
-  const norm = code.replace(/[^a-z0-9]/gi, "").toLowerCase();
-  if (!norm) return null;
-  const match = Object.values(readDiaries()).find(
-    (d) => d.handover.token && d.handover.token.replace(/^h_/, "").toLowerCase() === norm
-  );
-  return match?.handover.token ?? null;
+/**
+ * Resolve a typed Referral code (any spacing/case) back to its link token, or
+ * null — via the same public route as resolveHandoverGate. Doesn't itself log
+ * an open: callers always follow up with resolveHandoverGate(token), which
+ * does, so logging here too would double-count the same visit.
+ */
+export async function resolveCode(code: string): Promise<string | null> {
+  if (!code.trim()) return null;
+  const res = await fetch(`/api/handover?code=${encodeURIComponent(code)}`);
+  if (!res.ok) return null;
+  const { token } = (await res.json()) as { token: string | null };
+  return token;
 }
 
 /** The pet's single current Caregiver (ADR-0007: one at a time), or null. */
-export function diaryCaregiver(diaryId: string): Account | null {
+export async function diaryCaregiver(diaryId: string): Promise<Account | null> {
   const accounts = readAccounts();
   const m = readMemberships().find((x) => x.diaryId === diaryId && x.role === "caregiver");
   return m ? accounts[m.accountId] ?? null : null;
 }
 
 /** The signed-in account's role on a given diary, or null if they have none. */
-export function roleOnDiary(diaryId: string): Role | null {
-  const acct = getAccount();
-  if (!acct) return null;
-  const m = readMemberships().find(
-    (x) => x.accountId === acct.id && x.diaryId === diaryId
-  );
+/**
+ * This account's REAL (Supabase) membership role on a diary, or null — never
+ * falls back to the localStorage mock. Shared by roleOnDiary and the feeding
+ * functions (ticket 03): a diary this account has real membership on gets its
+ * Feeding confirms stored server-side (genuinely cross-device); everything
+ * else keeps today's localStorage-shadow behavior until tickets 04/06 move
+ * Caregiver membership onto Supabase too.
+ */
+async function realMembershipRole(diaryId: string): Promise<Role | null> {
+  const supabase = supabaseBrowser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from("membership")
+    .select("role")
+    .eq("account_id", user.id)
+    .eq("diary_id", diaryId)
+    .maybeSingle();
+  return (data?.role as Role | undefined) ?? null;
+}
+
+export async function roleOnDiary(diaryId: string): Promise<Role | null> {
+  const real = await realMembershipRole(diaryId);
+  if (real) return real;
+  const supabase = supabaseBrowser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  // Caregiver membership for a demo/mock diary still lives in localStorage
+  // until ticket 04/06 moves it onto Supabase too.
+  const m = readMemberships().find((x) => x.accountId === user.id && x.diaryId === diaryId);
   return m?.role ?? null;
 }
 
-/** Read any diary by id (e.g. the caregiver view resolves a pet it has a membership on). */
-export function getDiaryById(diaryId: string): Diary | null {
+/**
+ * Read any diary by id (e.g. the caregiver view resolves a pet it has a
+ * membership on). Tries Supabase first (a real, owner-created diary); a
+ * miss falls back to the localStorage mock (demo diaries). For a real diary,
+ * overlays the localStorage "shadow" entry's diet/grooming/feeding/handover
+ * fields — those tables don't exist until tickets 03/04/07/08 — on top of
+ * the Supabase-sourced core fields.
+ */
+export async function getDiaryById(diaryId: string): Promise<Diary | null> {
   ensureMigrated();
+  const supabase = supabaseBrowser();
+  const { data: row } = await supabase.from("diary").select("*").eq("id", diaryId).maybeSingle();
+  if (row) {
+    const mapped = await mapDiaryRow(row as DiaryRow);
+    const shadow = readDiaries()[diaryId];
+
+    // Ticket 03: a real member's Feeding confirms live in Postgres and are
+    // genuinely cross-device; a mock/demo caregiver (no real membership yet —
+    // tickets 04/06) keeps reading the localStorage shadow, same as before.
+    let feedingLog = shadow?.feedingLog ?? [];
+    if (await realMembershipRole(diaryId)) {
+      const { data: entries } = await supabase
+        .from("feeding_entry")
+        .select("fed_on,by_name,note")
+        .eq("diary_id", diaryId);
+      feedingLog = (entries ?? []).map((e) => ({
+        date: e.fed_on,
+        by: e.by_name,
+        note: e.note ?? undefined,
+      }));
+    }
+
+    // Ticket 04: a real member's Handover link lives in Postgres too.
+    let handover: HandoverState = shadow?.handover ?? { token: null, createdAt: null };
+    if (await realMembershipRole(diaryId)) {
+      const { data: tokenRow } = await supabase
+        .from("handover_token")
+        .select("token,created_at")
+        .eq("diary_id", diaryId)
+        .eq("state", "active")
+        .maybeSingle();
+      handover = tokenRow
+        ? { token: tokenRow.token, createdAt: tokenRow.created_at }
+        : { token: null, createdAt: null };
+    }
+
+    return {
+      ...mapped,
+      dietPlan: shadow?.dietPlan ?? null,
+      groomingGuide: shadow?.groomingGuide ?? null,
+      feedingLog,
+      handover,
+    };
+  }
   return readDiaries()[diaryId] ?? null;
 }
 
@@ -770,10 +1148,10 @@ export function getDiaryById(diaryId: string): Diary | null {
  *   is first-match, so a second membership would make owner-vs-caregiver routing
  *   depend on array order. An owner opening their own link stays owner-only.
  */
-export function joinAsCaregiver(token: string): Membership | null {
-  const acct = getAccount();
+export async function joinAsCaregiver(token: string): Promise<Membership | null> {
+  const acct = await getAccount();
   if (!acct) return null;
-  const target = resolveHandoverGate(token);
+  const target = await resolveHandoverGate(token);
   if (!target) return null;
   const existing = readMemberships().find(
     (m) => m.accountId === acct.id && m.diaryId === target.diaryId
@@ -808,14 +1186,18 @@ export function joinAsCaregiver(token: string): Membership | null {
  * Owner (history + a future Rating). Access is genuinely gone (no membership);
  * only the Owner's memory of them remains.
  */
-export function revokeHandoverLink(): Diary | null {
-  const cur = getDiary();
+export async function revokeHandoverLink(): Promise<Diary | null> {
+  const cur = await getDiary();
   if (!cur) return null;
-  const next: Diary = {
-    ...cur,
-    handover: { token: null, createdAt: null },
-  };
-  writeDiary(next);
+  const supabase = supabaseBrowser();
+  const { error } = await supabase
+    .from("handover_token")
+    .update({ state: "revoked", revoked_at: new Date().toISOString() })
+    .eq("diary_id", cur.id)
+    .eq("state", "active");
+  if (error) throw error;
+  // Caregiver-unbinding + Past Caregiver retention stays on the localStorage
+  // mock until ticket 05 moves past_caregiver onto Supabase too.
   const all = readMemberships();
   const ending = all.filter((m) => m.diaryId === cur.id && m.role === "caregiver");
   retainPastCaregivers(
@@ -824,7 +1206,7 @@ export function revokeHandoverLink(): Diary | null {
   );
   const remaining = all.filter((m) => !(m.diaryId === cur.id && m.role === "caregiver"));
   write(MEMBERSHIPS_KEY, remaining);
-  return next;
+  return getDiaryById(cur.id);
 }
 
 /**
@@ -850,7 +1232,9 @@ function retainPastCaregivers(diaryId: string, accountIds: string[]): void {
  * rejoined (holds a live Caregiver membership again) is excluded: they are a
  * current Caregiver, not a past one. Rendered by ticket 05 on the Circle.
  */
-export function pastCaregivers(diaryId: string): { account: Account; endedAt: string }[] {
+export async function pastCaregivers(
+  diaryId: string
+): Promise<{ account: Account; endedAt: string }[]> {
   const accounts = readAccounts();
   const liveCaregiverIds = new Set(
     readMemberships()
@@ -872,8 +1256,11 @@ export function pastCaregivers(diaryId: string): { account: Account; endedAt: st
  * sees ratings THEY wrote — never the owner's rating of them. That is what keeps
  * a Rating private by construction (ADR-0005; CONTEXT.md).
  */
-export function getRating(caregiverAccountId: string, diaryId: string): Rating | null {
-  const acct = getAccount();
+export async function getRating(
+  caregiverAccountId: string,
+  diaryId: string
+): Promise<Rating | null> {
+  const acct = await getAccount();
   if (!acct) return null;
   return (
     readRatings().find(
@@ -892,13 +1279,13 @@ export function getRating(caregiverAccountId: string, diaryId: string): Rating |
  * dropped. The record is keyed by account ids (not the link), so it survives a
  * revoke and re-share.
  */
-export function setRating(
+export async function setRating(
   caregiverAccountId: string,
   diaryId: string,
   stars: number,
   note: string
-): Rating | null {
-  const acct = getAccount();
+): Promise<Rating | null> {
+  const acct = await getAccount();
   if (!acct) return null;
   const clean = Math.max(1, Math.min(5, Math.round(stars)));
   const trimmed = note.trim();
@@ -931,14 +1318,14 @@ export function setRating(
 /* ---- caregiving ("Helping with") + demo seeding (slice 05) -------------- */
 
 /** Diaries the signed-in account helps with (caregiver role) — real + demo. */
-export function caregivingDiaries(): Diary[] {
-  const acct = getAccount();
+export async function caregivingDiaries(): Promise<Diary[]> {
+  const acct = await getAccount();
   if (!acct) return [];
-  const diaries = readDiaries();
-  return readMemberships()
+  const ids = readMemberships()
     .filter((m) => m.accountId === acct.id && m.role === "caregiver")
-    .map((m) => diaries[m.diaryId])
-    .filter((d): d is Diary => !!d);
+    .map((m) => m.diaryId);
+  const diaries = await Promise.all(ids.map((id) => getDiaryById(id)));
+  return diaries.filter((d): d is Diary => !!d);
 }
 
 function buildDemoDiary(
@@ -1003,8 +1390,8 @@ function buildDemoDiary(
  * Idempotent: no-op once the account holds any caregiver membership (real or
  * demo), so real joins are never shadowed and it never re-seeds.
  */
-export function ensureDemoCaregiving(): void {
-  const acct = getAccount();
+export async function ensureDemoCaregiving(): Promise<void> {
+  const acct = await getAccount();
   if (!acct) return;
   const mems = readMemberships();
   if (mems.some((m) => m.accountId === acct.id && m.role === "caregiver")) return;
@@ -1040,15 +1427,16 @@ export function ensureDemoCaregiving(): void {
 
 /* ---- completeness nudge (a UI preference, not diary data) --------------- */
 
-export function isNudgeDismissed(): boolean {
+export async function isNudgeDismissed(): Promise<boolean> {
   return read<boolean>(NUDGE_KEY) === true;
 }
 
-export function setNudgeDismissed(dismissed: boolean): void {
+export async function setNudgeDismissed(dismissed: boolean): Promise<void> {
   write(NUDGE_KEY, dismissed);
 }
 
 /* ---- derived view helpers (kept here so screens stay declarative) -------- */
+/* All pure — no I/O — operate on an already-loaded Diary/value. */
 
 export function isFedToday(diary: Diary): boolean {
   return diary.feedingLog.some((e) => e.date === today());

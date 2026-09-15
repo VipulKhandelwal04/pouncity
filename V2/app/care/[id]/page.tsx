@@ -40,25 +40,28 @@ export default function CaregiverView() {
   const [account, setAccount] = useState<Account | null>(null);
 
   useEffect(() => {
-    const acct = getAccount(); // no signIn fallback — signed-out stays signed-out
-    const d = getDiaryById(id);
-    const role = acct ? roleOnDiary(id) : null;
+    async function run() {
+      const acct = await getAccount(); // no signIn fallback — signed-out stays signed-out
+      const d = await getDiaryById(id);
+      const role = acct ? await roleOnDiary(id) : null;
 
-    if (role === "owner") {
-      router.replace("/diary"); // the owner has their own full view
-      return;
+      if (role === "owner") {
+        router.replace("/diary"); // the owner has their own full view
+        return;
+      }
+      if (!d || !d.handover.token) {
+        setStatus("ended"); // unknown pet, or the link was turned off → no access
+        return;
+      }
+      if (!acct || role !== "caregiver") {
+        router.replace(`/d/${d.handover.token}`); // must sign in / join first → the gate
+        return;
+      }
+      setAccount(acct);
+      setDiary(d);
+      setStatus("view");
     }
-    if (!d || !d.handover.token) {
-      setStatus("ended"); // unknown pet, or the link was turned off → no access
-      return;
-    }
-    if (!acct || role !== "caregiver") {
-      router.replace(`/d/${d.handover.token}`); // must sign in / join first → the gate
-      return;
-    }
-    setAccount(acct);
-    setDiary(d);
-    setStatus("view");
+    run();
   }, [id, router]);
 
   if (status === "loading") {

@@ -9,8 +9,6 @@ import {
   getAccount,
   roleOnDiary,
   diaryCaregiver,
-  signIn,
-  setAccountName,
   joinAsCaregiver,
   signOut,
   type Account,
@@ -26,18 +24,16 @@ import {
  * - Signed-in Owner of this diary → sent to their own diary.
  * - Signed-in Caregiver of this diary → sent to its caregiver view.
  * - Signed-in without a membership → one-tap "Help with {pet}" (no re-auth).
- * - Signed out → an inline passwordless sign-in (email, then name for a new
- *   account) that binds them and lands them on the caregiver view.
+ * - Signed out → sent to the real /sign-in page (magic link or Google), with
+ *   `next` pointing back here, and returns to finish the join.
  *
- * IMPORTANT: getAccount() is called ALONE (no signIn fallback) — a public route
- * must not mint an account for an anonymous visitor. And the signed-out flow
- * captures the visitor's OWN email inline: routing through the static /sign-in
- * (which mints the owner email) would collapse the caregiver into the owner
- * account. (Deliberate deviation from the ticket's "reuse /sign-in" wording —
- * the mock static page can't feed a distinct identity into the seam.)
+ * IMPORTANT: getAccount() is called ALONE — a public route must not mint an
+ * account for an anonymous visitor. Now that /sign-in is real Supabase Auth
+ * (ticket 02), each visitor authenticates as themself, so routing through the
+ * shared sign-in page no longer risks collapsing a caregiver into the owner's
+ * identity the way the old hardcoded mock email did.
  */
 type GateStatus = "loading" | "gate" | "invalid" | "taken";
-type Mode = "view" | "email" | "name";
 
 export default function HandoverGate() {
   const params = useParams<{ token: string }>();
@@ -46,56 +42,60 @@ export default function HandoverGate() {
   const [status, setStatus] = useState<GateStatus>("loading");
   const [target, setTarget] = useState<HandoverTarget | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
-  const [mode, setMode] = useState<Mode>("view");
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = resolveHandoverGate(token);
-    if (!t) {
-      setStatus("invalid");
-      return;
-    }
-    const acct = getAccount(); // no signIn fallback — anonymous stays anonymous
-    if (acct) {
-      const role = roleOnDiary(t.diaryId);
-      if (role === "owner") {
-        router.replace("/diary");
+    async function run() {
+      const t = await resolveHandoverGate(token);
+      if (!t) {
+        setStatus("invalid");
         return;
       }
-      if (role === "caregiver") {
-        router.replace(`/care/${t.diaryId}`);
+      const acct = await getAccount(); // anonymous stays anonymous — no auto sign-in
+      if (acct && !acct.name) {
+        // First sign-in via the gate — capture a name, then come straight back.
+        router.replace("/diary/welcome?next=" + encodeURIComponent(`/d/${token}`));
         return;
       }
-    }
-    // 1:1 (ADR-0007): the spot is taken if someone else already cares for this
-    // pet. The owner + this pet's caregiver were already redirected above, so any
-    // caregiver here is a different person — this visitor can't join yet.
-    if (diaryCaregiver(t.diaryId)) {
+      if (acct) {
+        const role = await roleOnDiary(t.diaryId);
+        if (role === "owner") {
+          router.replace("/diary");
+          return;
+        }
+        if (role === "caregiver") {
+          router.replace(`/care/${t.diaryId}`);
+          return;
+        }
+      }
+      // 1:1 (ADR-0007): the spot is taken if someone else already cares for this
+      // pet. The owner + this pet's caregiver were already redirected above, so any
+      // caregiver here is a different person — this visitor can't join yet.
+      if (await diaryCaregiver(t.diaryId)) {
+        setTarget(t);
+        setStatus("taken");
+        return;
+      }
       setTarget(t);
-      setStatus("taken");
-      return;
+      setAccount(acct);
+      setStatus("gate");
     }
-    setTarget(t);
-    setAccount(acct);
-    setStatus("gate");
+    run();
   }, [token, router]);
 
   const petName = target?.petName ?? "";
 
   /** Bind (unless owner) and go where the resulting role belongs. */
-  function finishJoin() {
+  async function finishJoin() {
     if (!target) return;
     // Owner → no-op; existing caregiver of this pet → idempotent. A non-member
     // only binds if the single caregiver spot is still open (ADR-0007).
-    if (roleOnDiary(target.diaryId) === null) {
-      if (!joinAsCaregiver(token)) {
+    if ((await roleOnDiary(target.diaryId)) === null) {
+      if (!(await joinAsCaregiver(token))) {
         setStatus("taken"); // someone claimed the spot first
         return;
       }
     }
-    const role = roleOnDiary(target.diaryId);
+    const role = await roleOnDiary(target.diaryId);
     router.replace(role === "owner" ? "/diary" : `/care/${target.diaryId}`);
   }
 
@@ -103,38 +103,13 @@ export default function HandoverGate() {
     finishJoin();
   }
 
-  function submitEmail(e: React.FormEvent) {
-    e.preventDefault();
-    const clean = email.trim();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(clean)) {
-      setError("Enter a valid email.");
-      return;
-    }
-    const acct = signIn(clean); // distinct email → distinct account (reattaches if returning)
-    setError(null);
-    if (!acct.name) {
-      setMode("name"); // new account — capture a display name next
-      return;
-    }
-    finishJoin(); // returning account already named → straight to help
+  function signUpToHelp() {
+    router.push("/sign-in?next=" + encodeURIComponent(`/d/${token}`));
   }
 
-  function submitName(e: React.FormEvent) {
-    e.preventDefault();
-    const clean = name.trim();
-    if (!clean) {
-      setError("Add your name so the owner knows who's helping.");
-      return;
-    }
-    setAccountName(clean);
-    setError(null);
-    finishJoin();
-  }
-
-  function switchIdentity() {
-    signOut();
+  async function switchIdentity() {
+    await signOut();
     setAccount(null);
-    setMode("view");
   }
 
   if (status === "loading") {
@@ -234,11 +209,11 @@ export default function HandoverGate() {
                 </button>
               </span>
             </>
-          ) : mode === "view" ? (
+          ) : (
             <>
               <button
                 className="pill"
-                onClick={() => setMode("email")}
+                onClick={signUpToHelp}
                 style={{ justifySelf: "start", marginTop: 4 }}
               >
                 Sign up to help
@@ -251,71 +226,6 @@ export default function HandoverGate() {
                 </Link>
               </span>
             </>
-          ) : mode === "email" ? (
-            <form onSubmit={submitEmail} noValidate style={{ display: "grid", gap: 10, marginTop: 4 }}>
-              <label htmlFor="join-email" className="mono">
-                Your email
-              </label>
-              <input
-                id="join-email"
-                className="input"
-                type="email"
-                autoComplete="email"
-                autoFocus
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (error) setError(null);
-                }}
-                placeholder="you@email.com"
-                aria-invalid={!!error}
-                aria-describedby={error ? "join-email-error" : undefined}
-              />
-              {error && (
-                <div id="join-email-error" className="field-msg" role="alert">
-                  {error}
-                </div>
-              )}
-              <button type="submit" className="pill" style={{ justifySelf: "start" }}>
-                Continue
-              </button>
-              <span className="hint">
-                No password. We just link {petName}&rsquo;s care to you.
-              </span>
-            </form>
-          ) : (
-            /* mode === "name" — new account only */
-            <form onSubmit={submitName} noValidate style={{ display: "grid", gap: 10, marginTop: 4 }}>
-              <label htmlFor="join-name" className="mono">
-                Your name
-              </label>
-              <input
-                id="join-name"
-                className="input"
-                type="text"
-                autoComplete="given-name"
-                autoFocus
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (error) setError(null);
-                }}
-                placeholder="e.g. Alex"
-                aria-invalid={!!error}
-                aria-describedby={error ? "join-name-error" : undefined}
-              />
-              {error && (
-                <div id="join-name-error" className="field-msg" role="alert">
-                  {error}
-                </div>
-              )}
-              <button type="submit" className="pill" style={{ justifySelf: "start" }}>
-                Start helping
-              </button>
-              <span className="hint">
-                So {petName}&rsquo;s owner sees who logged each feed.
-              </span>
-            </form>
           )}
         </div>
       </main>

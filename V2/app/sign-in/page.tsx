@@ -86,6 +86,12 @@ function SignInForm() {
           <span className="hint">
             We only use your Google account to sign you in.
           </span>
+
+          <p className="hint" style={{ marginTop: 4 }}>
+            By continuing, you agree to our{" "}
+            <a href="/terms">Terms of Use</a> and{" "}
+            <a href="/privacy">Privacy Policy</a>.
+          </p>
         </div>
       </main>
     </>

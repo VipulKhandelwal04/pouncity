@@ -4,11 +4,15 @@ import path from "path";
 const nextConfig: NextConfig = {
   // Pin the workspace root so Next doesn't infer it from a stray lockfile higher up.
   turbopack: { root: path.join(__dirname) },
-  // Serve the static marketing home at `/`, so one server hosts both the
-  // marketing site and the /diary app. (`/sign-in` is a real app route now, so
-  // it is not rewritten to a static page.)
+  // Serve the static marketing home + legal pages at clean paths, so one server
+  // hosts both the marketing site and the /diary app. (`/sign-in` is a real app
+  // route now, so it is not rewritten to a static page.)
   async rewrites() {
-    return [{ source: "/", destination: "/index.html" }];
+    return [
+      { source: "/", destination: "/index.html" },
+      { source: "/privacy", destination: "/privacy.html" },
+      { source: "/terms", destination: "/terms.html" },
+    ];
   },
   // The waitlist is retired at launch: anyone can sign up directly. Old links
   // (emails, social) to /join-waitlist land on the marketing home. Temporary

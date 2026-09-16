@@ -42,11 +42,12 @@ export default function DietPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, diary?.id]);
 
-  // AI "generation" runs on entering the working step (canned; AI Gateway later)
+  // AI generation runs on entering the working step. It starts immediately:
+  // the real model call provides the wait, no artificial delay on top.
   useEffect(() => {
     if (step !== "working") return;
     let cancelled = false;
-    const t = setTimeout(async () => {
+    (async () => {
       const d = await requestDietPlan(food);
       if (cancelled) return;
       if (!d) {
@@ -56,10 +57,9 @@ export default function DietPage() {
       void track("diet_plan_generated", { diaryId: d.id, props: { source: d.dietPlan?.source } });
       setDiary(d);
       setStep("view");
-    }, 1200);
+    })();
     return () => {
       cancelled = true;
-      clearTimeout(t);
     };
   }, [step, food]);
 
@@ -251,6 +251,26 @@ export default function DietPage() {
 
       {step === "view" && plan && (
         <div style={{ display: "grid", gap: 18 }}>
+          {diary.detailsUpdatedAt && new Date(diary.detailsUpdatedAt) > new Date(plan.createdAt) && (
+            <div
+              className="card"
+              style={{
+                borderStyle: "dashed",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={{ lineHeight: 1.5 }}>
+                {diary.name}&rsquo;s details have changed since this plan was made.
+              </span>
+              <button className="pill pill--sm" onClick={() => setStep("capture")}>
+                Regenerate
+              </button>
+            </div>
+          )}
           <p style={{ fontSize: "1.08rem", lineHeight: 1.5 }}>{plan.summary}</p>
 
           <div style={{ display: "grid", gap: 10 }}>

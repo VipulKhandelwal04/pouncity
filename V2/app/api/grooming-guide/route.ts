@@ -49,7 +49,8 @@ export async function POST(request: Request) {
       model: groq("openai/gpt-oss-120b"),
       schema: suggestionSchema,
       system:
-        "You are a calm, practical pet-care assistant giving general everyday grooming guidance for a HEALTHY pet. " +
+        `You are a calm, practical pet-care assistant giving general everyday grooming guidance for a HEALTHY ${species.toUpperCase()}. ` +
+        `Every recommendation must be appropriate for a ${species}; never give advice meant for another species (cats self-groom and rarely need baths; dogs need regular ones). ` +
         "Tailor to THIS pet:\n" +
         "- COAT TYPE drives brushing cadence and mat risk (long, double, or curly coats need more frequent brushing than short or smooth ones).\n" +
         "- BREED informs typical coat, shedding, and grooming needs.\n" +

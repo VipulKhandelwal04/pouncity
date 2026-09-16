@@ -45,10 +45,12 @@ export default function GroomingPage() {
     run();
   }, [router]);
 
+  // AI generation runs on entering the working step. It starts immediately:
+  // the real model call provides the wait, no artificial delay on top.
   useEffect(() => {
     if (step !== "working") return;
     let cancelled = false;
-    const t = setTimeout(async () => {
+    (async () => {
       const d = await requestGroomingGuide(coat);
       if (cancelled) return;
       if (!d) {
@@ -57,10 +59,9 @@ export default function GroomingPage() {
       }
       setDiary(d);
       setStep("view");
-    }, 1200);
+    })();
     return () => {
       cancelled = true;
-      clearTimeout(t);
     };
   }, [step, coat]);
 
@@ -260,6 +261,26 @@ export default function GroomingPage() {
 
       {step === "view" && guide && (
         <div style={{ display: "grid", gap: 18 }}>
+          {diary.detailsUpdatedAt && new Date(diary.detailsUpdatedAt) > new Date(guide.createdAt) && (
+            <div
+              className="card"
+              style={{
+                borderStyle: "dashed",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <span style={{ lineHeight: 1.5 }}>
+                {diary.name}&rsquo;s details have changed since this guide was made.
+              </span>
+              <button className="pill pill--sm" onClick={() => setStep("capture")}>
+                Regenerate
+              </button>
+            </div>
+          )}
           <p style={{ fontSize: "1.08rem", lineHeight: 1.5 }}>{guide.summary}</p>
 
           <div style={{ display: "grid", gap: 10 }}>

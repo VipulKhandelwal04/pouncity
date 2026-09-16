@@ -52,8 +52,10 @@ export async function POST(request: Request) {
       model: groq("openai/gpt-oss-120b"),
       schema: suggestionSchema,
       system:
-        "You are a calm, practical pet-care assistant giving general everyday feeding guidance for a HEALTHY pet. " +
+        `You are a calm, practical pet-care assistant giving general everyday feeding guidance for a HEALTHY ${species.toUpperCase()}. ` +
+        `Every recommendation must be appropriate for a ${species}; never give advice meant for another species. ` +
         "Tailor the plan to THIS pet:\n" +
+        `- SPECIES comes first: a ${species}'s nutritional needs, portion sizes, and feeding habits differ from other pets'.\n` +
         "- WEIGHT drives the daily portion (approximate maintenance energy for that body size).\n" +
         "- AGE sets life stage and meal frequency: puppies and kittens need more frequent, smaller meals and more energy per kg; adults are steady; seniors usually need slightly less.\n" +
         "- BREED informs size class, typical energy level, and body-condition tendencies (some breeds gain weight easily).\n" +

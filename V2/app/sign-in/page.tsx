@@ -442,7 +442,11 @@ const CSS = `
   .signin-page .auth-copy .reassure{align-items:center}
   .signin-page .auth-card{justify-self:center}
   .signin-page .peek{width:92px; top:-54px}
-  .signin-page .auth-ghost{top:5%}
+  /* Once the stage stacks to one column, the poster ghost and the "COME ON IN"
+     headline are both sun-brown at poster scale and collide. The ghost is
+     decorative scenery (aria-hidden), so drop it on mobile and let the
+     headline carry the field. */
+  .signin-page .auth-ghost{display:none}
   .signin-page .foot-top{grid-template-columns:1fr 1fr; gap:30px 24px}
   .signin-page .foot-brand{grid-column:1 / -1}
   .signin-page .assure{grid-template-columns:1fr; gap:24px}

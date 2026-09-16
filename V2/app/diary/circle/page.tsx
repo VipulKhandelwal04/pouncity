@@ -1,5 +1,7 @@
 "use client";
 
+import { BrandLoader } from "@/components/BrandLoader";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -101,11 +103,7 @@ export default function CirclePage() {
   }, [router]);
 
   if (!ready) {
-    return (
-      <main className="app-shell" style={{ paddingTop: 80, textAlign: "center" }}>
-        <span className="mono">Loading…</span>
-      </main>
-    );
+    return <BrandLoader />;
   }
 
   const token = diary?.handover.token ?? null;

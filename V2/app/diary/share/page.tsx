@@ -1,5 +1,7 @@
 "use client";
 
+import { BrandLoader } from "@/components/BrandLoader";
+
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
@@ -14,9 +16,5 @@ export default function SharePage() {
     router.replace("/diary/circle");
   }, [router]);
 
-  return (
-    <main className="app-shell" style={{ paddingTop: 80, textAlign: "center" }}>
-      <span className="mono">Loading…</span>
-    </main>
-  );
+  return <BrandLoader />;
 }

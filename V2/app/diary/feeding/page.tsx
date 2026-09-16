@@ -1,5 +1,7 @@
 "use client";
 
+import { BrandLoader } from "@/components/BrandLoader";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DetailShell } from "@/components/DetailShell";
@@ -33,11 +35,7 @@ export default function FeedingDiaryPage() {
   }, [router]);
 
   if (!ready || !diary) {
-    return (
-      <main className="app-shell" style={{ paddingTop: 80, textAlign: "center" }}>
-        <span className="mono">Loading…</span>
-      </main>
-    );
+    return <BrandLoader />;
   }
 
   const entries = feedingHistory(diary); // newest first

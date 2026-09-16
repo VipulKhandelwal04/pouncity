@@ -24,6 +24,16 @@ const dmMono = DM_Mono({
 export const metadata: Metadata = {
   title: "Pouncity: your pet's diary",
   description: "The one living record for your pet, ready to hand to any sitter.",
+  // iOS reads these for the installed app's name, icon, and standalone chrome
+  // (it ignores the web app manifest's splash fields).
+  appleWebApp: {
+    capable: true,
+    title: "Pouncity",
+    statusBarStyle: "default",
+  },
+  icons: {
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {

@@ -1,5 +1,7 @@
 "use client";
 
+import { BrandLoader } from "@/components/BrandLoader";
+
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Wordmark } from "@/components/Wordmark";
@@ -55,11 +57,7 @@ function Welcome() {
   }
 
   if (!ready) {
-    return (
-      <main className="app-shell" style={{ paddingTop: 80, textAlign: "center" }}>
-        <span className="mono">Loading…</span>
-      </main>
-    );
+    return <BrandLoader />;
   }
 
   return (

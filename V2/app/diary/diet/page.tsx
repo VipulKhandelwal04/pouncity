@@ -1,5 +1,7 @@
 "use client";
 
+import { BrandLoader } from "@/components/BrandLoader";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DetailShell } from "@/components/DetailShell";
@@ -71,11 +73,7 @@ export default function DietPage() {
   }, [step, food]);
 
   if (step === "loading" || !diary) {
-    return (
-      <main className="app-shell" style={{ paddingTop: 80, textAlign: "center" }}>
-        <span className="mono">Loading…</span>
-      </main>
-    );
+    return <BrandLoader />;
   }
 
   const plan = diary.dietPlan;

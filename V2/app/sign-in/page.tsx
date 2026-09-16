@@ -187,7 +187,7 @@ function SignInView() {
         </a>
         <nav className="topnav" aria-label="Primary">
           <a className="nav-more" href="/#how">How it works</a>
-          <a href="/">Back to site <span aria-hidden="true">&rarr;</span></a>
+          <a href="/">Back to Home <span aria-hidden="true">&rarr;</span></a>
         </nav>
       </header>
 

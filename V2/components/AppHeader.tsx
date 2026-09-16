@@ -1,18 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { Wordmark } from "./Wordmark";
-import { signOut, type Account } from "@/lib/diary-service";
-
-/** The sign-in page is served at /sign-in on the same origin. */
-function signInUrl(): string {
-  return "/sign-in";
-}
+import { type Account } from "@/lib/diary-service";
 
 export function AppHeader({ account }: { account: Account | null }) {
-  async function handleSignOut() {
-    await signOut();
-    window.location.href = signInUrl();
-  }
+  const initial = (account?.name || account?.email || "?").trim().charAt(0).toUpperCase();
 
   return (
     <header
@@ -28,7 +21,12 @@ export function AppHeader({ account }: { account: Account | null }) {
     >
       <Wordmark />
       {account ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        <Link
+          href="/diary/profile"
+          aria-label="Your profile"
+          title={account.email}
+          style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}
+        >
           <span
             style={{
               display: "flex",
@@ -37,7 +35,6 @@ export function AppHeader({ account }: { account: Account | null }) {
               minWidth: 0,
               lineHeight: 1.2,
             }}
-            title={account.email}
           >
             {account.name && (
               <span
@@ -54,28 +51,30 @@ export function AppHeader({ account }: { account: Account | null }) {
                 {account.name}
               </span>
             )}
-            <span
-              className="mono"
-              style={{
-                maxWidth: 150,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                fontSize: "0.6rem",
-                color: "var(--ink-72)",
-              }}
-            >
-              {account.email}
+            <span className="mono" style={{ fontSize: "0.6rem", color: "var(--ink-72)" }}>
+              Profile
             </span>
           </span>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="pill pill--ghost pill--sm"
+          <span
+            aria-hidden="true"
+            style={{
+              display: "grid",
+              placeItems: "center",
+              width: 40,
+              height: 40,
+              flex: "0 0 auto",
+              borderRadius: "50%",
+              border: "var(--border-thin)",
+              background: "var(--sun)",
+              fontFamily: "var(--font-display)",
+              fontWeight: 600,
+              fontSize: "1rem",
+              color: "var(--ink)",
+            }}
           >
-            Sign out
-          </button>
-        </div>
+            {initial}
+          </span>
+        </Link>
       ) : null}
     </header>
   );

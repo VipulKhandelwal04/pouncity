@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DetailShell } from "@/components/DetailShell";
 import { Disclaimer } from "@/components/Disclaimer";
-import { getDiary, requestDietPlan, saveDietPlan, type Diary } from "@/lib/diary-service";
+import { StalePlanNudge } from "@/components/StalePlanNudge";
+import {
+  getDiary,
+  requestDietPlan,
+  saveDietPlan,
+  planIsStale,
+  type Diary,
+} from "@/lib/diary-service";
 import { track } from "@/lib/analytics";
 
 type Step = "loading" | "intro" | "manual" | "capture" | "working" | "view" | "error";
@@ -251,25 +258,12 @@ export default function DietPage() {
 
       {step === "view" && plan && (
         <div style={{ display: "grid", gap: 18 }}>
-          {diary.detailsUpdatedAt && new Date(diary.detailsUpdatedAt) > new Date(plan.createdAt) && (
-            <div
-              className="card"
-              style={{
-                borderStyle: "dashed",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <span style={{ lineHeight: 1.5 }}>
-                {diary.name}&rsquo;s details have changed since this plan was made.
-              </span>
-              <button className="pill pill--sm" onClick={() => setStep("capture")}>
-                Regenerate
-              </button>
-            </div>
+          {planIsStale(diary, plan.createdAt) && (
+            <StalePlanNudge
+              petName={diary.name}
+              thing="plan"
+              onRegenerate={() => setStep("capture")}
+            />
           )}
           <p style={{ fontSize: "1.08rem", lineHeight: 1.5 }}>{plan.summary}</p>
 

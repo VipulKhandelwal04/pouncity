@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DetailShell } from "@/components/DetailShell";
 import { Disclaimer } from "@/components/Disclaimer";
+import { StalePlanNudge } from "@/components/StalePlanNudge";
 import {
   getDiary,
   requestGroomingGuide,
   saveGroomingGuide,
+  planIsStale,
   getGroomReminderFor,
   setGroomReminderFor,
   subscribeToPush,
@@ -261,25 +263,12 @@ export default function GroomingPage() {
 
       {step === "view" && guide && (
         <div style={{ display: "grid", gap: 18 }}>
-          {diary.detailsUpdatedAt && new Date(diary.detailsUpdatedAt) > new Date(guide.createdAt) && (
-            <div
-              className="card"
-              style={{
-                borderStyle: "dashed",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <span style={{ lineHeight: 1.5 }}>
-                {diary.name}&rsquo;s details have changed since this guide was made.
-              </span>
-              <button className="pill pill--sm" onClick={() => setStep("capture")}>
-                Regenerate
-              </button>
-            </div>
+          {planIsStale(diary, guide.createdAt) && (
+            <StalePlanNudge
+              petName={diary.name}
+              thing="guide"
+              onRegenerate={() => setStep("capture")}
+            />
           )}
           <p style={{ fontSize: "1.08rem", lineHeight: 1.5 }}>{guide.summary}</p>
 

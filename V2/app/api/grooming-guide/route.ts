@@ -39,7 +39,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
 
-  const species = body.species === "cat" ? "cat" : "dog";
+  // Strict: an unknown species must never silently become dog advice.
+  if (body.species !== "cat" && body.species !== "dog") {
+    return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  }
+  const species = body.species;
   const breed = String(body.breed ?? "").slice(0, 120);
   const ageLabel = String(body.ageLabel ?? "").slice(0, 60);
   const coatType = String(body.coatType ?? "").slice(0, 120);

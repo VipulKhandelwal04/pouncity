@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
+import { mixpanelTrack } from "@/lib/mixpanel-server";
 
 /** Exchanges the magic-link / Google OAuth code for a session, then sends the
  *  visitor on to wherever they were headed (`next`, default `/diary`). */
@@ -15,7 +16,10 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await supabaseServer();
-    await supabase.auth.exchangeCodeForSession(code);
+    const { data } = await supabase.auth.exchangeCodeForSession(code);
+    // Server-recorded on purpose: the one reliable "a session began" moment
+    // (mixpanelTrack never throws, so the redirect is never blocked).
+    if (data?.user) await mixpanelTrack("signed_in", data.user.id);
   }
 
   return NextResponse.redirect(new URL(next, url.origin));

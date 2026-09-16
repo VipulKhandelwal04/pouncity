@@ -64,7 +64,10 @@ export default function DietPage() {
         setStep("error");
         return;
       }
-      void track("diet_plan_generated", { diaryId: d.id, props: { source: d.dietPlan?.source } });
+      void track("diet_plan_generated", {
+        diaryId: d.id,
+        props: { source: d.dietPlan?.source, species: d.species },
+      });
       setDiary(d);
       setStep("view");
     })();

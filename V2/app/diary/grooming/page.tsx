@@ -8,6 +8,7 @@ import { DetailShell } from "@/components/DetailShell";
 import { Disclaimer } from "@/components/Disclaimer";
 import { StalePlanNudge } from "@/components/StalePlanNudge";
 import { YarnSpinner } from "@/components/YarnSpinner";
+import { track } from "@/lib/analytics";
 import {
   getDiary,
   requestGroomingGuide,
@@ -50,6 +51,14 @@ export default function GroomingPage() {
     run();
   }, [router]);
 
+  // Analytics: a grooming guide being shown is a "viewed" event (mirrors the
+  // diet page's diet_plan_viewed).
+  useEffect(() => {
+    if (step === "view" && diary?.groomingGuide)
+      void track("grooming_guide_viewed", { diaryId: diary.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, diary?.id]);
+
   // AI generation runs on entering the working step. It starts immediately:
   // the real model call provides the wait, no artificial delay on top.
   useEffect(() => {
@@ -62,6 +71,10 @@ export default function GroomingPage() {
         setStep("error");
         return;
       }
+      void track("grooming_guide_generated", {
+        diaryId: d.id,
+        props: { source: d.groomingGuide?.source, species: d.species },
+      });
       setDiary(d);
       setStep("view");
     })();
@@ -116,6 +129,10 @@ export default function GroomingPage() {
       setStep("error");
       return;
     }
+    void track("grooming_guide_generated", {
+      diaryId: d.id,
+      props: { source: d.groomingGuide?.source, species: d.species },
+    });
     setDiary(d);
     setStep("view");
   }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PetAvatar } from "./PetAvatar";
 import { fileToDataUrl, readFileAsDataUrl } from "@/lib/image";
+import { track } from "@/lib/analytics";
 import {
   createDiary,
   updateDiary,
@@ -135,7 +136,8 @@ export function DiaryForm({
     setSaveError(null);
     try {
       if (mode === "create") {
-        await createDiary(core);
+        const created = await createDiary(core);
+        void track("diary_created", { diaryId: created.id, props: { species } });
       } else {
         const vetFilled = vetName.trim() || vetPhone.trim() || vetClinic.trim();
         await updateDiary({

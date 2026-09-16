@@ -9,6 +9,7 @@ import {
   type Account,
   type Diary,
 } from "@/lib/diary-service";
+import { track } from "@/lib/analytics";
 
 /**
  * The profile drawer — opened from the account menu's "Profile" item. Holds
@@ -124,6 +125,11 @@ export function ProfileDrawer({
         setRemoving(false);
         return;
       }
+      // The diary state still holds the pre-removal values (churn signal).
+      void track("pet_removed", {
+        diaryId: diary?.id,
+        props: { species: diary?.species },
+      });
       onClose();
       router.replace("/diary/create");
     } catch {

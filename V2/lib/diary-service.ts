@@ -585,31 +585,33 @@ export async function createDiary(core: DiaryCore): Promise<Diary> {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Sign in first.");
 
-  const { data: row, error } = await supabase
-    .from("diary")
-    .insert({
-      name: core.name,
-      species: core.species,
-      breed: core.breed,
-      age_label: core.ageLabel,
-      weight_kg: core.weightKg,
-    })
-    .select()
-    .single();
-  if (error || !row) throw error ?? new Error("Could not create the diary.");
+  // A brand-new diary is not SELECT-visible to its creator until the owner
+  // membership row exists (RLS "diary: member reads"), so an insert().select()
+  // RETURNING trips the row-level check. Generate the id client-side, insert
+  // without a RETURNING, create the owner membership, then the diary is readable.
+  const id = crypto.randomUUID();
+  const { error } = await supabase.from("diary").insert({
+    id,
+    name: core.name,
+    species: core.species,
+    breed: core.breed,
+    age_label: core.ageLabel,
+    weight_kg: core.weightKg,
+  });
+  if (error) throw error;
 
   const { error: memErr } = await supabase
     .from("membership")
-    .insert({ account_id: user.id, diary_id: row.id, role: "owner" });
+    .insert({ account_id: user.id, diary_id: id, role: "owner" });
   if (memErr) throw memErr;
 
   if (core.photoUrl) {
-    const path = await resolveUpload("pet-photos", row.id, core.photoUrl);
-    if (path) await supabase.from("diary").update({ photo_url: path }).eq("id", row.id);
+    const path = await resolveUpload("pet-photos", id, core.photoUrl);
+    if (path) await supabase.from("diary").update({ photo_url: path }).eq("id", id);
   }
 
   write(NUDGE_KEY, false); // fresh pet → an active completeness nudge
-  return (await getDiaryById(row.id))!;
+  return (await getDiaryById(id))!;
 }
 
 /** Merge a patch into the existing diary (edit); null if none exists yet. */

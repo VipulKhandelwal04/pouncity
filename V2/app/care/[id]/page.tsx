@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { AppHeader } from "@/components/AppHeader";
 import { PetAvatar } from "@/components/PetAvatar";
 import { FeedingTap } from "@/components/FeedingTap";
+import { TelLink } from "@/components/TelLink";
 import {
   getAccount,
   getDiaryById,
@@ -280,24 +281,12 @@ export default function CaregiverView() {
               >
                 {owner.phone && (
                   <div>
-                    Phone:{" "}
-                    <a
-                      href={`tel:${owner.phone.replace(/[^\d+]/g, "")}`}
-                      style={{ color: "var(--coral-text)" }}
-                    >
-                      {owner.phone}
-                    </a>
+                    Phone: <TelLink phone={owner.phone} />
                   </div>
                 )}
                 {owner.emergencyPhone && (
                   <div>
-                    Emergency contact:{" "}
-                    <a
-                      href={`tel:${owner.emergencyPhone.replace(/[^\d+]/g, "")}`}
-                      style={{ color: "var(--coral-text)" }}
-                    >
-                      {owner.emergencyPhone}
-                    </a>
+                    Emergency contact: <TelLink phone={owner.emergencyPhone} />
                   </div>
                 )}
               </div>
@@ -317,14 +306,7 @@ export default function CaregiverView() {
               </strong>
               <div style={{ color: "var(--ink-72)", fontSize: "0.9rem", marginTop: 2 }}>
                 {diary.vet.name && diary.vet.clinic && <div>{diary.vet.clinic}</div>}
-                {diary.vet.phone && (
-                  <a
-                    href={`tel:${diary.vet.phone.replace(/[^\d+]/g, "")}`}
-                    style={{ color: "var(--coral-text)" }}
-                  >
-                    {diary.vet.phone}
-                  </a>
-                )}
+                {diary.vet.phone && <TelLink phone={diary.vet.phone} />}
               </div>
             </div>
           </>

@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Wordmark } from "./Wordmark";
 import { ProfileMenu } from "./ProfileMenu";
 import { ProfileDrawer } from "./ProfileDrawer";
 import { type Account } from "@/lib/diary-service";
 
 export function AppHeader({ account }: { account: Account | null }) {
-  // Local copy so a profile save in the drawer updates the chip immediately.
-  const [acct, setAcct] = useState(account);
+  // A profile save in the drawer overrides the prop (no prop-to-state
+  // mirroring): the override is always the newer value, and the component
+  // remounts on navigation anyway.
+  const [override, setOverride] = useState<Account | null>(null);
+  const acct = override ?? account;
   const [menuOpen, setMenuOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  useEffect(() => setAcct(account), [account]);
 
   const initial = (acct?.name || acct?.email || "?").trim().charAt(0).toUpperCase();
 
@@ -103,7 +105,7 @@ export function AppHeader({ account }: { account: Account | null }) {
           account={acct}
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
-          onAccountChange={setAcct}
+          onAccountChange={setOverride}
         />
       )}
     </header>

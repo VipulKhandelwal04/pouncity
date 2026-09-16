@@ -506,11 +506,7 @@ export async function getAccount(): Promise<Account | null> {
  * Update the account's profile details (Profile page). Email is not editable,
  * it comes from Google. Blank phone fields clear to null.
  */
-export async function updateProfile(fields: {
-  name?: string;
-  phone?: string | null;
-  emergencyPhone?: string | null;
-}): Promise<Account | null> {
+export async function updateProfile(fields: Partial<ContactDetails>): Promise<Account | null> {
   const userId = await sessionUserId();
   if (!userId) return null;
   const updates: Record<string, unknown> = {};
@@ -593,13 +589,14 @@ export async function setAccountName(name: string): Promise<Account | null> {
     .from("account")
     .update({ name: clean })
     .eq("id", user.id)
-    .select("id,name,email")
+    .select(ACCOUNT_COLUMNS)
     .maybeSingle();
   if (!data) return null;
-  mirrorAccount(data as Account);
-  accountCache = null; // partial column select — let the next getAccount refetch
+  const account = mapAccountRow(data as AccountRow);
+  mirrorAccount(account);
+  accountCache = { userId: user.id, account, at: Date.now() }; // write-through
   persistNav();
-  return data as Account;
+  return account;
 }
 
 /** Sign out of the real Supabase session. */
@@ -853,16 +850,9 @@ export async function updateDiary(patch: Partial<Diary>): Promise<Diary | null> 
   if (patch.registered !== undefined) updates.registered = patch.registered;
   if (patch.currentFood !== undefined) updates.current_food = patch.currentFood;
   if (patch.coatType !== undefined) updates.coat_type = patch.coatType;
-
-  // Diet plans and grooming guides are generated from species/breed/age/weight,
-  // so stamp when any of those actually change — the diet and grooming screens
-  // compare this against their plan's createdAt and offer a regenerate.
-  const detailsChanged =
-    (patch.species !== undefined && patch.species !== cur.species) ||
-    (patch.breed !== undefined && patch.breed !== cur.breed) ||
-    (patch.ageLabel !== undefined && patch.ageLabel !== cur.ageLabel) ||
-    (patch.weightKg !== undefined && patch.weightKg !== cur.weightKg);
-  if (detailsChanged) updates.details_updated_at = new Date().toISOString();
+  // details_updated_at is stamped by the diary_details_stamp DB trigger
+  // (migration 0015) when species/breed/age/weight actually change — server
+  // clock, so it compares cleanly against the plans' server-side created_at.
 
   if (patch.photoUrl !== undefined) {
     const resolved = await resolveUpload("pet-photos", cur.id, patch.photoUrl);
@@ -888,8 +878,11 @@ export async function updateDiary(patch: Partial<Diary>): Promise<Diary | null> 
  * Permanently delete the owner's diary and everything hanging off it.
  * Storage objects (photo, rabies certificate) are removed FIRST, while the
  * owner membership still exists: the storage delete policies check membership,
- * and deleting the diary row cascades the membership away. The diary delete
- * then cascades feeding entries, diet plans, grooming guides, handover
+ * and deleting the diary row cascades the membership away. To avoid losing
+ * the photo on a delete that would then be refused, ownership is verified
+ * up front — after that, the only way the diary delete misses is a
+ * concurrent removal, where the object was on its way out anyway. The diary
+ * delete cascades feeding entries, diet plans, grooming guides, handover
  * tokens/opens, memberships, past caregivers, ratings and reminder prefs at
  * the database level (all FKs are ON DELETE CASCADE). Returns false when
  * there is no diary or the delete was refused.
@@ -898,6 +891,9 @@ export async function removeDiary(): Promise<boolean> {
   const id = await ownedDiaryId();
   if (!id) return false;
   const supabase = supabaseBrowser();
+
+  // Confirm ownership fresh (not from cache) BEFORE the destructive steps.
+  if ((await realMembershipRole(id)) !== "owner") return false;
 
   // The raw row carries the STORED object paths (the mapped Diary has
   // resolved URLs, which storage.remove can't take). Best-effort: a failed
@@ -916,17 +912,27 @@ export async function removeDiary(): Promise<boolean> {
     .delete({ count: "exact" })
     .eq("id", id);
   if (error) throw error;
-  if (!count) return false; // RLS refused — don't report a wipe that didn't happen
+  if (!count) return false; // refused (concurrent removal) — don't report a wipe
 
   ownedIdCache = null;
   diaryCache.delete(id);
   persistNav();
 
-  // Clear the local shadow + per-diary UI prefs for the removed diary.
+  // Clear every local trace of the removed diary: the mock shadow, any mock
+  // membership rows, this browser's reminder-pref shadow entries, and the nudge.
   const diaries = readDiaries();
   if (diaries[id]) {
     delete diaries[id];
     write(DIARIES_KEY, diaries);
+  }
+  const mems = readMemberships();
+  const keptMems = mems.filter((m) => m.diaryId !== id);
+  if (keptMems.length !== mems.length) write(MEMBERSHIPS_KEY, keptMems);
+  const prefs = readReminderShadow();
+  const prefKeys = Object.keys(prefs).filter((k) => k.endsWith(`::${id}`));
+  if (prefKeys.length > 0) {
+    for (const k of prefKeys) delete prefs[k];
+    write(REMINDER_PREFS_KEY, prefs);
   }
   write(NUDGE_KEY, false);
   return true;
@@ -1204,6 +1210,18 @@ async function savePushSubscription(sub: PushSubscription): Promise<boolean> {
     { onConflict: "endpoint" }
   );
   return !error;
+}
+
+/**
+ * Whether a saved plan/guide predates the last edit of the pet's core details
+ * (species/breed/age/weight). Both timestamps are server-side (the
+ * diary_details_stamp trigger and the plans' created_at defaults), so the
+ * comparison is clock-skew free. Shared by the diet and grooming screens.
+ */
+export function planIsStale(diary: Diary, planCreatedAt: string): boolean {
+  return (
+    !!diary.detailsUpdatedAt && new Date(diary.detailsUpdatedAt) > new Date(planCreatedAt)
+  );
 }
 
 /* ---- diet plan (ticket 04) ---------------------------------------------- */
@@ -1975,12 +1993,25 @@ export async function setRating(
   return getRating(caregiverAccountId, diaryId);
 }
 
-/** The owner's contact card for a sitter or caregiver on this diary. */
-export interface OwnerContact {
+/**
+ * A person's contact details — the shape shared by the Account fields, the
+ * profile form, and the owner card the caregiver view shows.
+ */
+export interface ContactDetails {
   name: string;
   phone: string | null;
   emergencyPhone: string | null;
 }
+
+/** The owner's contact card for a sitter or caregiver on this diary. */
+export type OwnerContact = ContactDetails;
+
+/** Row shape returned by the `diary_owner_contact` RPC (migration 0014). */
+type OwnerContactRow = {
+  name: string | null;
+  phone: string | null;
+  emergency_phone: string | null;
+};
 
 /**
  * The owner's name and contact numbers for a diary the current person is a
@@ -1992,12 +2023,13 @@ export interface OwnerContact {
 export async function diaryOwnerContact(diaryId: string): Promise<OwnerContact | null> {
   const supabase = supabaseBrowser();
   const { data } = await supabase.rpc("diary_owner_contact", { p_diary_id: diaryId });
-  const row = Array.isArray(data) ? data[0] : data;
+  const rows = (data ?? []) as OwnerContactRow[];
+  const row = rows[0];
   if (!row) return null;
   return {
     name: row.name ?? "",
-    phone: row.phone ?? null,
-    emergencyPhone: row.emergency_phone ?? null,
+    phone: row.phone,
+    emergencyPhone: row.emergency_phone,
   };
 }
 

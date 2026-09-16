@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { EVENT_BELIEF } from "@/lib/beliefs";
+import { mixpanelTrack } from "@/lib/mixpanel-server";
 
 /**
  * The public Handover endpoint (ticket 04, ADR-0003) — the one capability
@@ -66,6 +67,11 @@ export async function GET(request: Request) {
         belief: EVENT_BELIEF.handover_opened,
         diary_id: row.diary_id,
         recipient_key: recipient,
+      });
+      // Mixpanel mirror: the sitter may have no account, so distinct_id is
+      // the anonymous recipient key (same dedupe as the row above).
+      await mixpanelTrack("handover_opened", `sitter:${recipient}`, {
+        diary_id: row.diary_id,
       });
     }
 

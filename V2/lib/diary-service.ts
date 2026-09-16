@@ -136,13 +136,6 @@ export interface Diary {
    * regenerate when the plan predates the change.
    */
   detailsUpdatedAt?: string | null;
-  /**
-   * A seeded example the current person "helps with" — only exists because the
-   * mock is single-browser and can't produce real cross-account caregiving.
-   * Shown with a visible "Demo" marker; retires once the backend makes caregiving
-   * data real. Absent/false on every real diary.
-   */
-  demo?: boolean;
 }
 
 export type Role = "owner" | "caregiver";
@@ -245,9 +238,29 @@ function write<T>(key: string, value: T): void {
  * avoid re-entrancy, and every public entry point calls it before touching the
  * store so there is no code path that reads the old shape by accident.
  */
+/**
+ * Remove the mock-era demo caregiving seed ("Mochi"/"Waffles", ids `demo_*`)
+ * from browsers that were seeded before demo seeding was retired. Writes only
+ * when something was actually removed, so steady state is two cheap reads.
+ */
+function purgeDemoSeed(diaries: Record<string, Diary>): void {
+  const demoIds = Object.keys(diaries).filter((id) => id.startsWith("demo_"));
+  if (demoIds.length > 0) {
+    for (const id of demoIds) delete diaries[id];
+    write(DIARIES_KEY, diaries);
+  }
+  const mems = readMemberships();
+  const kept = mems.filter((m) => !m.diaryId.startsWith("demo_"));
+  if (kept.length !== mems.length) write(MEMBERSHIPS_KEY, kept);
+}
+
 function ensureMigrated(): void {
   if (!hasWindow()) return;
-  if (read<Record<string, Diary>>(DIARIES_KEY) !== null) return; // already on the new shape
+  const existing = read<Record<string, Diary>>(DIARIES_KEY);
+  if (existing !== null) {
+    purgeDemoSeed(existing); // already on the new shape; just clean stale demo data
+    return;
+  }
 
   const legacyDiary = read<Diary>(DIARY_KEY);
   const legacySession = read<{ email: string }>(SESSION_KEY);
@@ -441,17 +454,13 @@ export async function getMemberships(): Promise<Membership[]> {
     .from("membership")
     .select("account_id,diary_id,role")
     .eq("account_id", acct.id);
-  const owned: Membership[] = (data ?? []).map((m) => ({
+  // All real memberships (owner and caregiver) live in Supabase; the
+  // localStorage mock no longer contributes rows (demo seeding retired).
+  return (data ?? []).map((m) => ({
     accountId: m.account_id,
     diaryId: m.diary_id,
     role: m.role as Role,
   }));
-  // Real caregiver memberships now come from Supabase (above); the localStorage
-  // mock only still holds DEMO caregiving pets (single-browser demo seed).
-  const demoCaregiver = readMemberships().filter(
-    (m) => m.accountId === acct.id && m.role === "caregiver"
-  );
-  return [...owned, ...demoCaregiver];
 }
 
 /** The diary id this account owns (the owner-app has exactly one), or null. */
@@ -1416,14 +1425,9 @@ async function realMembershipRole(diaryId: string): Promise<Role | null> {
 }
 
 export async function roleOnDiary(diaryId: string): Promise<Role | null> {
-  const real = await realMembershipRole(diaryId);
-  if (real) return real;
-  const userId = await sessionUserId();
-  if (!userId) return null;
-  // Real caregiver membership is now in Supabase (realMembershipRole, above).
-  // The only rows left in the localStorage mock are DEMO caregiving pets.
-  const m = readMemberships().find((x) => x.accountId === userId && x.diaryId === diaryId);
-  return m?.role ?? null;
+  // All real membership is in Supabase; the localStorage mock fallback is gone
+  // (its only remaining rows were the retired demo caregiving seed).
+  return realMembershipRole(diaryId);
 }
 
 /**
@@ -1731,14 +1735,12 @@ export async function setRating(
   return getRating(caregiverAccountId, diaryId);
 }
 
-/* ---- caregiving ("Helping with") + demo seeding (slice 05) -------------- */
+/* ---- caregiving ("Helping with") ---------------------------------------- */
 
-/** Diaries the signed-in account helps with (caregiver role) — real + demo. */
+/** Diaries the signed-in account helps with (caregiver role). */
 export async function caregivingDiaries(): Promise<Diary[]> {
   const acct = await getAccount();
   if (!acct) return [];
-  // Real caregiver memberships live in Supabase; demo ones (single-browser mock)
-  // still ride localStorage. getMemberships() merges both.
   const ids = (await getMemberships())
     .filter((m) => m.accountId === acct.id && m.role === "caregiver")
     .map((m) => m.diaryId);
@@ -1746,110 +1748,11 @@ export async function caregivingDiaries(): Promise<Diary[]> {
   return diaries.filter((d): d is Diary => !!d);
 }
 
-function buildDemoDiary(
-  id: string,
-  name: string,
-  species: Species,
-  breed: string,
-  quirks: string,
-  plan: { food: string; portionPerDay: string; meals: string },
-  groom: { coatType: string; frequencyWeeks: number; brushing: string },
-  ownerName: string
-): Diary {
-  return {
-    id,
-    name,
-    species,
-    breed,
-    ageLabel: species === "dog" ? "3 years" : "5 years",
-    weightKg: species === "dog" ? 12 : 5,
-    photoUrl: null,
-    quirks,
-    vet: null,
-    neuterStatus: "none",
-    registered: false,
-    rabies: null,
-    currentFood: plan.food,
-    coatType: groom.coatType,
-    dietPlan: {
-      createdAt: new Date().toISOString(),
-      currentFood: plan.food,
-      summary: `Keep ${name} on ${plan.food}, measured by weight.`,
-      portionPerDay: plan.portionPerDay,
-      meals: plan.meals,
-      tips: ["Weigh portions with a scale.", "Keep treats to ~10% of the day."],
-      source: "templated",
-    },
-    groomingGuide: {
-      createdAt: new Date().toISOString(),
-      coatType: groom.coatType,
-      frequencyWeeks: groom.frequencyWeeks,
-      summary: `${name}'s ${groom.coatType} does best with a steady rhythm, and most of it you can do at home.`,
-      routine: [
-        `Brush ${groom.brushing} to stop mats and cut shedding.`,
-        "Bath every 4–6 weeks, or when actually dirty. Over-washing dries the skin.",
-        "Trim nails every 3–4 weeks; a click on the floor means they're long.",
-        "Check ears and teeth weekly.",
-      ],
-      professional:
-        species === "cat"
-          ? `Most cats self-groom, but a ${groom.coatType} mats easily, so a professional groom about every ${groom.frequencyWeeks} weeks helps.`
-          : `A professional groom about every ${groom.frequencyWeeks} weeks keeps the coat and nails in shape.`,
-      source: "templated",
-    },
-    feedingLog: [{ date: today(), by: ownerName }],
-    handover: { token: "h_" + id, createdAt: new Date().toISOString() },
-    createdAt: new Date().toISOString(),
-    demo: true,
-  };
-}
-
-/**
- * Seed 1-2 clearly-marked DEMO caregiving pets for the current account so the
- * "Helping with" section is real to click through in the single-browser mock.
- * Idempotent: no-op once the account holds any caregiver membership (real or
- * demo), so real joins are never shadowed and it never re-seeds.
- */
-export async function ensureDemoCaregiving(): Promise<void> {
-  const acct = await getAccount();
-  if (!acct) return;
-  // No-op once the account holds ANY caregiver membership — real (Supabase) or
-  // demo (localStorage) — so a real join is never shadowed and demos never
-  // re-seed on top of it.
-  const alreadyHelps = (await getMemberships()).some(
-    (m) => m.accountId === acct.id && m.role === "caregiver"
-  );
-  if (alreadyHelps) return;
-  const mems = readMemberships();
-
-  const demos = [
-    buildDemoDiary(
-      "demo_mochi",
-      "Mochi",
-      "cat",
-      "Ragdoll",
-      "Naps on the windowsill every afternoon. Leave the blind up.",
-      { food: "Ocean Fish blend", portionPerDay: "About 70 g of dry food a day", meals: "2 meals" },
-      { coatType: "long double coat", frequencyWeeks: 6, brushing: "every day or two" },
-      "Priya"
-    ),
-    buildDemoDiary(
-      "demo_waffles",
-      "Waffles",
-      "dog",
-      "Beagle",
-      "Will trade anything for a tennis ball. Counter-surfs.",
-      { food: "Grain-free chicken", portionPerDay: "About 240 g of dry food a day", meals: "2 meals" },
-      { coatType: "short smooth coat", frequencyWeeks: 12, brushing: "once a week" },
-      "Marco"
-    ),
-  ];
-  const diaries = readDiaries();
-  for (const d of demos) diaries[d.id] = d;
-  write(DIARIES_KEY, diaries);
-  for (const d of demos) mems.push({ accountId: acct.id, diaryId: d.id, role: "caregiver" });
-  write(MEMBERSHIPS_KEY, mems);
-}
+// The mock-era demo seeding (buildDemoDiary / ensureDemoCaregiving, which
+// planted "Mochi" and "Waffles" as fake caregiving pets in localStorage) is
+// gone: caregiving is real now, so "Helping with" shows only actual Supabase
+// memberships and stays empty until someone genuinely joins. Browsers that
+// were already seeded are cleaned up by purgeDemoSeed (ensureMigrated).
 
 /* ---- completeness nudge (a UI preference, not diary data) --------------- */
 

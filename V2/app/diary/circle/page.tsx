@@ -14,7 +14,6 @@ import {
   getRating,
   setRating,
   caregivingDiaries,
-  ensureDemoCaregiving,
   regenerateHandoverLink,
   revokeHandoverLink,
   handoverReadiness,
@@ -72,9 +71,6 @@ export default function CirclePage() {
         return;
       }
       const owned = await getDiary();
-      if (owned) {
-        await ensureDemoCaregiving(); // keep "pets you help with" populated in the demo
-      }
       // A signed-in account can always reach the Circle — it is also where you enter
       // a code to help with someone's pet, so a 0-caregiving account is not bounced.
       const cg = owned ? await diaryCaregiver(owned.id) : null;

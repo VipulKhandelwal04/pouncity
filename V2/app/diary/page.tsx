@@ -12,7 +12,6 @@ import {
   getDiary,
   caregivingDiaries,
   diaryCaregiver,
-  ensureDemoCaregiving,
   dietStatus,
   groomingStatus,
   completeness,
@@ -48,7 +47,6 @@ export default function DiaryHome() {
       }
       const owned = await getDiary();
       if (owned) {
-        await ensureDemoCaregiving(); // populate "Helping with" for the single-browser demo
         setCaregiver(await diaryCaregiver(owned.id));
       } else if ((await caregivingDiaries()).length === 0) {
         router.replace("/diary/create"); // no pet, not helping anyone → onboard an owner

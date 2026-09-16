@@ -183,18 +183,22 @@ export default function CirclePage() {
       return;
     }
     const target = await resolveHandoverGate(resolved);
-    if (target && (await roleOnDiary(target.diaryId)) === "owner") {
+    if (!target) {
+      setJoinError("That code isn't active anymore. Ask the owner for a fresh one.");
+      return;
+    }
+    const myRole = await roleOnDiary(target.diaryId);
+    if (myRole === "owner") {
       setJoinError(`That's your own pet's code. ${target.petName} is already yours.`);
       return;
     }
-    // 1:1 (ADR-0007): if the pet already has a caregiver who isn't me, the spot is
-    // taken. Name that clearly rather than a generic failure.
-    if (target) {
-      const current = await diaryCaregiver(target.diaryId);
-      if (current && current.id !== account?.id) {
-        setJoinError(`${target.petName} already has a caregiver right now.`);
-        return;
-      }
+    // 1:1 (ADR-0007): the spot is taken if the pet already has a caregiver and it
+    // isn't me. `taken` is server-computed (/api/handover) because I can't read
+    // the caregiver membership myself under RLS; my own "already helping" case is
+    // covered by myRole above.
+    if (myRole !== "caregiver" && target.taken) {
+      setJoinError(`${target.petName} already has a caregiver right now.`);
+      return;
     }
     const membership = await joinAsCaregiver(resolved);
     if (!membership) {

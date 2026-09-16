@@ -8,7 +8,6 @@ import {
   resolveHandoverGate,
   getAccount,
   roleOnDiary,
-  diaryCaregiver,
   joinAsCaregiver,
   signOut,
   type Account,
@@ -67,10 +66,12 @@ export default function HandoverGate() {
           return;
         }
       }
-      // 1:1 (ADR-0007): the spot is taken if someone else already cares for this
-      // pet. The owner + this pet's caregiver were already redirected above, so any
-      // caregiver here is a different person — this visitor can't join yet.
-      if (await diaryCaregiver(t.diaryId)) {
+      // 1:1 (ADR-0007): the spot is taken if someone already cares for this pet.
+      // The owner + this pet's own caregiver were redirected above, so a visitor
+      // still here with `taken` is a different person — they can't join yet.
+      // `taken` comes from /api/handover (service role): a visitor can't read the
+      // caregiver membership themselves under RLS.
+      if (t.taken) {
         setTarget(t);
         setStatus("taken");
         return;

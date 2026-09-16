@@ -27,6 +27,7 @@ import {
   type Diary,
   type Rating,
 } from "@/lib/diary-service";
+import { track } from "@/lib/analytics";
 
 /**
  * The Circle — the Owner's one place to manage who cares for their pet and to
@@ -124,7 +125,10 @@ export default function CirclePage() {
     }
     setGateMissing(null);
     const d = await regenerateHandoverLink();
-    if (d) setDiary(d);
+    if (d) {
+      setDiary(d);
+      void track("handover_created", { diaryId: d.id });
+    }
   }
   async function replaceLink() {
     if (!diary) return;
@@ -138,6 +142,7 @@ export default function CirclePage() {
     if (d) {
       setDiary(d);
       setCopiedWhat(null);
+      void track("handover_created", { diaryId: d.id });
     }
   }
   // Ends the pet's care: kills the link AND unbinds the one caregiver, who becomes

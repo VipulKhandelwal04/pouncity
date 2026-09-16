@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { EVENT_BELIEF } from "@/lib/beliefs";
 
 /**
  * The public Handover endpoint (ticket 04, ADR-0003) — the one capability
@@ -49,6 +50,24 @@ export async function GET(request: Request) {
     if (!diary) return NextResponse.json({ target: null });
 
     await admin.from("handover_open").insert({ token_id: row.id, recipient_key: recipient });
+
+    // Analytics (ticket 11): handover_opened, deduped per unique recipient so a
+    // sitter reopening the link counts once. Server-side because the recipient
+    // may be anonymous. Best-effort — never block the gate on it.
+    const { count: openedBefore } = await admin
+      .from("analytics_event")
+      .select("id", { count: "exact", head: true })
+      .eq("name", "handover_opened")
+      .eq("diary_id", row.diary_id)
+      .eq("recipient_key", recipient);
+    if ((openedBefore ?? 0) === 0) {
+      await admin.from("analytics_event").insert({
+        name: "handover_opened",
+        belief: EVENT_BELIEF.handover_opened,
+        diary_id: row.diary_id,
+        recipient_key: recipient,
+      });
+    }
 
     // Occupancy (ADR-0007: one Caregiver per pet). Reported as a bare boolean so
     // the gate/Circle can show "already taken" to a signed-out or non-owner

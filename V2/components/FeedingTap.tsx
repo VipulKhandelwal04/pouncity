@@ -12,6 +12,7 @@ import {
   isFedToday,
   type Diary,
 } from "@/lib/diary-service";
+import { track } from "@/lib/analytics";
 
 export function FeedingTap({
   diary,
@@ -43,6 +44,9 @@ export function FeedingTap({
   async function confirm() {
     const d = await confirmFeedingFor(diary.id, by);
     if (!d) return;
+    // Analytics (ticket 11): the daily feeding tap. track() dedupes to once per
+    // diary per day, so a repeat/undo-redo tap doesn't double-count.
+    void track("daily_feeding_tap", { diaryId: diary.id });
     setJustFed(true);
     onChange(d);
   }

@@ -84,27 +84,64 @@ function SignInView() {
   }, []);
 
   // A short word trails the cursor: "COME IN" over the hero, "STAY" over the
-  // dark band. The spans are React-rendered (below) so React owns them; here we
-  // only move them on mousemove (a CSS transition gives the soft glide). Re-binds
-  // when the word changes, since the span count changes. Pointer-fine + motion-OK.
+  // dark band. Same mechanics as the landing page: a per-frame lerp chain
+  // where the first letter chases the mouse and each letter chases the one
+  // before it (rAF, direct transform writes, no CSS transition on transform).
+  // Positioning on raw mousemove with transition delays looked stuttery by
+  // comparison. Spans are React-rendered (below) so React owns them; this
+  // effect only mutates style. Re-binds when the word changes (span count
+  // changes). Pointer-fine + motion-OK only.
+  const mouseRef = useRef({ x: 0, y: 0, seen: false, over: false });
+  useEffect(() => {
+    const m = mouseRef.current;
+    m.x = window.innerWidth / 2;
+    m.y = window.innerHeight / 2;
+    const onMove = (e: MouseEvent) => {
+      m.x = e.clientX;
+      m.y = e.clientY;
+      m.seen = true;
+    };
+    // The word steps aside over controls so it never garbles a label.
+    const onOver = (e: MouseEvent) => {
+      const t = e.target as Element | null;
+      m.over = !!(t && t.closest && t.closest("a,button,input"));
+    };
+    window.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseover", onOver);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseover", onOver);
+    };
+  }, []);
+
   useEffect(() => {
     const cur = curRef.current;
     if (!cur) return;
     if (!window.matchMedia("(pointer:fine)").matches) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const onMove = (e: MouseEvent) => {
-      const x = e.clientX + 20, y = e.clientY + 22;
-      const t = e.target as Element | null;
-      const over = !!(t && t.closest && t.closest("a,button,input"));
-      const spans = cur.children;
-      for (let i = 0; i < spans.length; i++) {
-        const s = spans[i] as HTMLElement;
-        s.style.transform = `translate(${x + i * 10}px, ${y}px)`;
-        s.style.opacity = over ? "0" : "1";
+    const m = mouseRef.current;
+    const chars = Array.from(cur.children) as HTMLElement[];
+    const pos = chars.map(() => ({ x: m.x, y: m.y }));
+    let shown: boolean | null = null;
+    let raf = 0;
+    const tick = () => {
+      const tx = m.x + 22, ty = m.y + 24;
+      for (let i = 0; i < chars.length; i++) {
+        const p = pos[i];
+        const target = i === 0 ? { x: tx, y: ty } : { x: pos[i - 1].x + 11, y: pos[i - 1].y };
+        p.x += (target.x - p.x) * 0.32;
+        p.y += (target.y - p.y) * 0.32;
+        chars[i].style.transform = `translate(${p.x}px, ${p.y}px)`;
       }
+      const want = m.seen && !m.over;
+      if (want !== shown) {
+        shown = want;
+        for (const c of chars) c.style.opacity = want ? "1" : "0";
+      }
+      raf = requestAnimationFrame(tick);
     };
-    window.addEventListener("mousemove", onMove);
-    return () => window.removeEventListener("mousemove", onMove);
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [cursorWord]);
 
   // Switch the trailing word based on which section is in view.
@@ -138,7 +175,7 @@ function SignInView() {
       <style>{CSS}</style>
       <div className="cur" aria-hidden="true" ref={curRef}>
         {[...cursorWord].map((ch, i) => (
-          <span key={cursorWord + i} style={{ transitionDelay: `${i * 0.018}s` }}>
+          <span key={cursorWord + i}>
             {ch === " " ? " " : ch}
           </span>
         ))}
@@ -285,7 +322,7 @@ const CSS = `
 
 /* cursor word trail */
 .signin-page .cur{position:fixed; top:0; left:0; z-index:900; pointer-events:none; mix-blend-mode:difference}
-.signin-page .cur span{position:fixed; top:0; left:0; color:#fff; font:500 .82rem var(--font-mono); will-change:transform; opacity:0; transition:transform .14s ease-out, opacity .22s ease}
+.signin-page .cur span{position:fixed; top:0; left:0; color:#fff; font:500 .82rem var(--font-mono); will-change:transform; opacity:0; transition:opacity .22s ease}
 @media (pointer:coarse){.signin-page .cur{display:none}}
 
 /* header */

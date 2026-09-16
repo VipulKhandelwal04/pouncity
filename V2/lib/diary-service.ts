@@ -145,6 +145,10 @@ export interface Account {
   id: string;
   name: string;
   email: string;
+  /** Optional contact numbers, captured on the Profile page. Optional on the
+   *  type so legacy/mirrored constructions stay valid; null until set. */
+  phone?: string | null;
+  emergencyPhone?: string | null;
 }
 
 /** Binds an Account to a Diary with a role. Roles are per-diary, never global. */
@@ -360,12 +364,55 @@ export async function getAccount(): Promise<Account | null> {
   if (!user) return null;
   const { data } = await supabase
     .from("account")
-    .select("id,name,email")
+    .select("id,name,email,phone,emergency_phone")
     .eq("id", user.id)
     .maybeSingle();
   // The account row is created by a DB trigger on signup; if it hasn't landed
   // yet (a rare race right after first sign-in), fall back to the session.
-  const account: Account = data ?? { id: user.id, name: "", email: user.email ?? "" };
+  const account: Account = data
+    ? {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        emergencyPhone: data.emergency_phone,
+      }
+    : { id: user.id, name: "", email: user.email ?? "" };
+  mirrorAccount(account);
+  return account;
+}
+
+/**
+ * Update the account's profile details (Profile page). Email is not editable,
+ * it comes from Google. Blank phone fields clear to null.
+ */
+export async function updateProfile(fields: {
+  name?: string;
+  phone?: string | null;
+  emergencyPhone?: string | null;
+}): Promise<Account | null> {
+  const userId = await sessionUserId();
+  if (!userId) return null;
+  const updates: Record<string, unknown> = {};
+  if (fields.name !== undefined) updates.name = fields.name.trim();
+  if (fields.phone !== undefined) updates.phone = fields.phone?.trim() || null;
+  if (fields.emergencyPhone !== undefined)
+    updates.emergency_phone = fields.emergencyPhone?.trim() || null;
+  const supabase = supabaseBrowser();
+  const { data, error } = await supabase
+    .from("account")
+    .update(updates)
+    .eq("id", userId)
+    .select("id,name,email,phone,emergency_phone")
+    .maybeSingle();
+  if (error || !data) return null;
+  const account: Account = {
+    id: data.id,
+    name: data.name,
+    email: data.email,
+    phone: data.phone,
+    emergencyPhone: data.emergency_phone,
+  };
   mirrorAccount(account);
   return account;
 }
@@ -697,6 +744,50 @@ export async function updateDiary(patch: Partial<Diary>): Promise<Diary | null> 
   const { error } = await supabase.from("diary").update(updates).eq("id", cur.id);
   if (error) throw error;
   return getDiaryById(cur.id);
+}
+
+/**
+ * Permanently delete the owner's diary and everything hanging off it.
+ * Storage objects (photo, rabies certificate) are removed FIRST, while the
+ * owner membership still exists: the storage delete policies check membership,
+ * and deleting the diary row cascades the membership away. The diary delete
+ * then cascades feeding entries, diet plans, grooming guides, handover
+ * tokens/opens, memberships, past caregivers, ratings and reminder prefs at
+ * the database level (all FKs are ON DELETE CASCADE). Returns false when
+ * there is no diary or the delete was refused.
+ */
+export async function removeDiary(): Promise<boolean> {
+  const id = await ownedDiaryId();
+  if (!id) return false;
+  const supabase = supabaseBrowser();
+
+  // The raw row carries the STORED object paths (the mapped Diary has
+  // resolved URLs, which storage.remove can't take). Best-effort: a failed
+  // object removal never blocks the diary delete.
+  const { data: row } = await supabase
+    .from("diary")
+    .select("photo_url,rabies_certificate_url")
+    .eq("id", id)
+    .maybeSingle();
+  if (row?.photo_url) await supabase.storage.from("pet-photos").remove([row.photo_url]);
+  if (row?.rabies_certificate_url)
+    await supabase.storage.from("rabies-certificates").remove([row.rabies_certificate_url]);
+
+  const { error, count } = await supabase
+    .from("diary")
+    .delete({ count: "exact" })
+    .eq("id", id);
+  if (error) throw error;
+  if (!count) return false; // RLS refused — don't report a wipe that didn't happen
+
+  // Clear the local shadow + per-diary UI prefs for the removed diary.
+  const diaries = readDiaries();
+  if (diaries[id]) {
+    delete diaries[id];
+    write(DIARIES_KEY, diaries);
+  }
+  write(NUDGE_KEY, false);
+  return true;
 }
 
 /* ---- feeding confirm (diary-id-addressed) ------------------------------- */

@@ -64,7 +64,7 @@ function SignInForm() {
     setError(null);
     try {
       await verifyEmailCode(email, clean);
-      // Hard navigation (not router.push) so middleware runs against the
+      // Hard navigation (not router.push) so proxy runs against the
       // freshly written session cookie and the destination renders signed in
       // on first paint.
       window.location.assign(next);

@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-/** Server-side Supabase client (route handlers, middleware) — reads/writes the
+/** Server-side Supabase client (route handlers, proxy) — reads/writes the
  *  session via cookies so auth persists across requests. */
 export async function supabaseServer() {
   const cookieStore = await cookies();
@@ -19,7 +19,7 @@ export async function supabaseServer() {
               cookieStore.set(name, value, options);
             }
           } catch {
-            // Called from a Server Component — middleware refreshes the
+            // Called from a Server Component — proxy refreshes the
             // session instead, so this is safe to ignore.
           }
         },

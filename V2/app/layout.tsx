@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fredoka, DM_Sans, DM_Mono } from "next/font/google";
+import { BfcacheGuard } from "@/components/BfcacheGuard";
 import "./globals.css";
 
 const fredoka = Fredoka({
@@ -52,7 +53,10 @@ export default function RootLayout({
       lang="en"
       className={`${fredoka.variable} ${dmSans.variable} ${dmMono.variable}`}
     >
-      <body>{children}</body>
+      <body>
+        <BfcacheGuard />
+        {children}
+      </body>
     </html>
   );
 }

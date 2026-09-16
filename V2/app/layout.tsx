@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fredoka, DM_Sans, DM_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { BfcacheGuard } from "@/components/BfcacheGuard";
 import { PwaSetup } from "@/components/PwaSetup";
 import "./globals.css";
@@ -75,6 +77,11 @@ export default function RootLayout({
         <BfcacheGuard />
         <PwaSetup />
         {children}
+        {/* Vercel Web Analytics + Speed Insights. These cover the Next.js
+            app routes; the static marketing pages carry the plain scripts
+            directly (they render outside this React tree). */}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

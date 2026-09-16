@@ -197,8 +197,9 @@ const NUDGE_KEY = "pouncity_nudge_dismissed_v1";
 // account. Never tied to identity beyond "the same browser opened this link
 // more than once".
 const RECIPIENT_KEY = "pouncity_recipient_key_v1";
-const FEED_REMINDERS_KEY = "pouncity_feed_reminders_v1"; // { [diaryId]: boolean }
-const GROOM_REMINDER_KEY = "pouncity_groom_reminder_v1";
+// Demo/mock reminder prefs (real members use the Supabase reminder_pref table,
+// ticket 09): { [accountId::diaryId]: { feeding, grooming } }.
+const REMINDER_PREFS_KEY = "pouncity_reminder_prefs_v1";
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -769,27 +770,163 @@ function reminderKey(accountId: string, diaryId: string): string {
   return `${accountId}::${diaryId}`;
 }
 
-function readFeedReminders(): Record<string, boolean> {
-  return read<Record<string, boolean>>(FEED_REMINDERS_KEY) ?? {};
+interface ReminderPref {
+  feeding: boolean;
+  grooming: boolean;
+}
+
+function readReminderShadow(): Record<string, ReminderPref> {
+  return read<Record<string, ReminderPref>>(REMINDER_PREFS_KEY) ?? {};
+}
+
+/**
+ * Read the current account's reminder prefs for a diary. A real member reads the
+ * Supabase reminder_pref row (per person, per diary, ticket 09); a demo/mock
+ * diary reads the localStorage shadow. Each member controls their OWN prefs.
+ */
+async function getReminderPref(diaryId: string): Promise<ReminderPref> {
+  const acct = await getAccount();
+  if (!acct) return { feeding: false, grooming: false };
+  if (await realMembershipRole(diaryId)) {
+    const supabase = supabaseBrowser();
+    const { data } = await supabase
+      .from("reminder_pref")
+      .select("feeding_enabled,grooming_enabled")
+      .eq("account_id", acct.id)
+      .eq("diary_id", diaryId)
+      .maybeSingle();
+    return { feeding: data?.feeding_enabled ?? false, grooming: data?.grooming_enabled ?? false };
+  }
+  return readReminderShadow()[reminderKey(acct.id, diaryId)] ?? { feeding: false, grooming: false };
+}
+
+async function setReminderPref(diaryId: string, patch: Partial<ReminderPref>): Promise<void> {
+  const acct = await getAccount();
+  if (!acct) return;
+  const next = { ...(await getReminderPref(diaryId)), ...patch };
+  if (await realMembershipRole(diaryId)) {
+    const supabase = supabaseBrowser();
+    await supabase.from("reminder_pref").upsert(
+      {
+        account_id: acct.id,
+        diary_id: diaryId,
+        feeding_enabled: next.feeding,
+        grooming_enabled: next.grooming,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "account_id,diary_id" }
+    );
+    return;
+  }
+  const all = readReminderShadow();
+  all[reminderKey(acct.id, diaryId)] = next;
+  write(REMINDER_PREFS_KEY, all);
 }
 
 export async function getFeedReminderFor(diaryId: string): Promise<boolean> {
-  const acct = await getAccount();
-  if (!acct) return false;
-  return readFeedReminders()[reminderKey(acct.id, diaryId)] === true;
+  return (await getReminderPref(diaryId)).feeding;
 }
 
 export async function setFeedReminderFor(diaryId: string, on: boolean): Promise<void> {
-  const acct = await getAccount();
-  if (!acct) return;
-  const all = readFeedReminders();
-  all[reminderKey(acct.id, diaryId)] = on;
-  write(FEED_REMINDERS_KEY, all);
+  await setReminderPref(diaryId, { feeding: on });
 }
 
-/** The reminder condition ticket 09/backend will consume: opted in AND not fed. */
+/** Grooming reminder, now per-diary to match reminder_pref (was global). */
+export async function getGroomReminderFor(diaryId: string): Promise<boolean> {
+  return (await getReminderPref(diaryId)).grooming;
+}
+
+export async function setGroomReminderFor(diaryId: string, on: boolean): Promise<void> {
+  await setReminderPref(diaryId, { grooming: on });
+}
+
+/** The reminder condition the ticket-10 scheduler consumes: opted in AND not fed. */
 export async function feedReminderDue(diary: Diary): Promise<boolean> {
   return (await getFeedReminderFor(diary.id)) && !isFedToday(diary);
+}
+
+/* ---- Web Push opt-in (ticket 09) --------------------------------------- */
+
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+
+function urlBase64ToUint8Array(base64: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+/** Whether this device already holds a push subscription. */
+export async function isPushSubscribed(): Promise<boolean> {
+  try {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return false;
+    const reg = await navigator.serviceWorker.getRegistration();
+    return reg ? (await reg.pushManager.getSubscription()) != null : false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Opt this device into Web Push: register the service worker, ask permission,
+ * subscribe with the VAPID key, and store the subscription. Returns true on
+ * success, false (never throws) if push is unsupported / permission is declined
+ * / anything fails — declining must NEVER break the reminder toggle or gate any
+ * feature (the no-guilt hard rail). Actual delivery is ticket 10.
+ */
+export async function subscribeToPush(): Promise<boolean> {
+  try {
+    if (
+      typeof window === "undefined" ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window) ||
+      typeof Notification === "undefined" ||
+      !VAPID_PUBLIC_KEY
+    ) {
+      return false;
+    }
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return false;
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    const sub =
+      existing ??
+      (await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        // Cast: the array is backed by a normal ArrayBuffer (atob), but the DOM
+        // lib types BufferSource as ArrayBuffer-specific vs Uint8Array's generic.
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) as BufferSource,
+      }));
+    return await savePushSubscription(sub);
+  } catch {
+    return false;
+  }
+}
+
+async function savePushSubscription(sub: PushSubscription): Promise<boolean> {
+  const acct = await getAccount();
+  if (!acct) return false;
+  const json = sub.toJSON();
+  const endpoint = json.endpoint;
+  const p256dh = json.keys?.p256dh;
+  const auth = json.keys?.auth;
+  if (!endpoint || !p256dh || !auth) return false;
+  const supabase = supabaseBrowser();
+  const { error } = await supabase.from("push_subscription").upsert(
+    {
+      account_id: acct.id,
+      endpoint,
+      p256dh,
+      auth,
+      user_agent:
+        typeof navigator !== "undefined" ? navigator.userAgent.slice(0, 300) : null,
+    },
+    { onConflict: "endpoint" }
+  );
+  return !error;
 }
 
 /* ---- diet plan (ticket 04) ---------------------------------------------- */
@@ -1064,14 +1201,6 @@ async function persistGroomingGuide(
   const next: Diary = { ...cur, coatType, groomingGuide: guide };
   writeDiary(next);
   return next;
-}
-
-export async function getGroomReminder(): Promise<boolean> {
-  return read<boolean>(GROOM_REMINDER_KEY) === true;
-}
-
-export async function setGroomReminder(on: boolean): Promise<void> {
-  write(GROOM_REMINDER_KEY, on);
 }
 
 /* ---- handover link (ticket 04: real; ticket 05 adds revoke's Past Caregiver retention) --- */

@@ -8,6 +8,7 @@ import {
   todayEntry,
   getFeedReminderFor,
   setFeedReminderFor,
+  subscribeToPush,
   isFedToday,
   type Diary,
 } from "@/lib/diary-service";
@@ -62,6 +63,9 @@ export function FeedingTap({
     const v = !remind;
     setRemind(v);
     await setFeedReminderFor(diary.id, v);
+    // Turning a reminder on is the push opt-in (best-effort). Declining the
+    // permission never undoes the preference or gates anything.
+    if (v) void subscribeToPush();
   }
 
   return (

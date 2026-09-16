@@ -70,6 +70,9 @@ export interface RabiesRecord {
   expiry: string | null;
 }
 
+/** How a diet plan was produced (ticket 07). */
+export type DietSource = "ai" | "templated" | "manual";
+
 export interface DietPlan {
   createdAt: string;
   currentFood: string;
@@ -77,6 +80,7 @@ export interface DietPlan {
   portionPerDay: string;
   meals: string;
   tips: string[];
+  source: DietSource;
 }
 
 export interface GroomingGuide {
@@ -813,16 +817,54 @@ export function generateDietPlan(diary: Diary, currentFood: string): DietPlan {
       "Keep treats under ~10% of the day's food.",
       `Re-check the amount whenever ${diary.name}'s weight changes.`,
     ],
+    source: "templated",
   };
 }
 
+/**
+ * Generate + save a diet plan. Tries the server AI route first (Gemini, keys
+ * server-only); on any failure — outage, guardrail rejection, non-2xx — falls
+ * back to the templated generator, so the screen never hard-depends on the
+ * model (ticket 07). `source` records which path produced it.
+ */
 export async function requestDietPlan(currentFood: string): Promise<Diary | null> {
   const cur = await getDiary();
   if (!cur) return null;
-  const plan = generateDietPlan(cur, currentFood);
-  const next: Diary = { ...cur, currentFood: plan.currentFood, dietPlan: plan };
-  writeDiary(next);
-  return next;
+  const food = currentFood.trim() || `a complete ${cur.species} food`;
+
+  let plan: DietPlan | null = null;
+  try {
+    const res = await fetch("/api/diet-plan", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        species: cur.species,
+        breed: cur.breed,
+        ageLabel: cur.ageLabel,
+        weightKg: cur.weightKg,
+        currentFood: food,
+      }),
+    });
+    if (res.ok) {
+      const { plan: p } = (await res.json()) as {
+        plan: { summary: string; portionPerDay: string; meals: string; tips: string[] };
+      };
+      plan = {
+        createdAt: new Date().toISOString(),
+        currentFood: food,
+        summary: p.summary,
+        portionPerDay: p.portionPerDay,
+        meals: p.meals,
+        tips: p.tips,
+        source: "ai",
+      };
+    }
+  } catch {
+    // network error — fall through to the templated plan below
+  }
+
+  if (!plan) plan = generateDietPlan(cur, food); // templated fallback
+  return persistDietPlan(cur.id, food, plan);
 }
 
 /** The manual alternative to AI generation — the owner writes the plan themselves. */
@@ -843,8 +885,40 @@ export async function saveDietPlan(fields: {
     portionPerDay: fields.portionPerDay.trim(),
     meals: fields.meals.trim(),
     tips: (fields.tips ?? []).map((t) => t.trim()).filter(Boolean),
+    source: "manual",
   };
-  const next: Diary = { ...cur, currentFood: food, dietPlan: plan };
+  return persistDietPlan(cur.id, food, plan);
+}
+
+/**
+ * The single write path for a diet plan. A real Owner's plan is a new row in the
+ * Supabase `diet_plan` table (latest row = current, ticket 07) and the diary's
+ * current_food is updated alongside; a demo/mock diary keeps the localStorage
+ * shadow. Returns the refreshed diary either way.
+ */
+async function persistDietPlan(
+  diaryId: string,
+  currentFood: string,
+  plan: DietPlan
+): Promise<Diary | null> {
+  if (await realMembershipRole(diaryId)) {
+    const supabase = supabaseBrowser();
+    await supabase.from("diary").update({ current_food: currentFood }).eq("id", diaryId);
+    const { error } = await supabase.from("diet_plan").insert({
+      diary_id: diaryId,
+      current_food: currentFood,
+      summary: plan.summary,
+      portion_per_day: plan.portionPerDay,
+      meals: plan.meals,
+      tips: plan.tips,
+      source: plan.source,
+    });
+    if (error) throw error;
+    return getDiaryById(diaryId);
+  }
+  const cur = await getDiaryById(diaryId);
+  if (!cur) return null;
+  const next: Diary = { ...cur, currentFood, dietPlan: plan };
   writeDiary(next);
   return next;
 }
@@ -1139,12 +1213,13 @@ export async function getDiaryById(diaryId: string): Promise<Diary | null> {
   if (row) {
     const mapped = await mapDiaryRow(row as DiaryRow);
     const shadow = readDiaries()[diaryId];
+    // A real member's downstream data lives in Postgres (cross-device); a
+    // demo/mock diary keeps the localStorage shadow. Computed once here.
+    const isMember = !!(await realMembershipRole(diaryId));
 
-    // Ticket 03: a real member's Feeding confirms live in Postgres and are
-    // genuinely cross-device; a mock/demo caregiver (no real membership yet —
-    // tickets 04/06) keeps reading the localStorage shadow, same as before.
+    // Ticket 03: Feeding confirms.
     let feedingLog = shadow?.feedingLog ?? [];
-    if (await realMembershipRole(diaryId)) {
+    if (isMember) {
       const { data: entries } = await supabase
         .from("feeding_entry")
         .select("fed_on,by_name,note")
@@ -1156,9 +1231,9 @@ export async function getDiaryById(diaryId: string): Promise<Diary | null> {
       }));
     }
 
-    // Ticket 04: a real member's Handover link lives in Postgres too.
+    // Ticket 04: the Handover link.
     let handover: HandoverState = shadow?.handover ?? { token: null, createdAt: null };
-    if (await realMembershipRole(diaryId)) {
+    if (isMember) {
       const { data: tokenRow } = await supabase
         .from("handover_token")
         .select("token,created_at")
@@ -1170,9 +1245,32 @@ export async function getDiaryById(diaryId: string): Promise<Diary | null> {
         : { token: null, createdAt: null };
     }
 
+    // Ticket 07: the diet plan — latest row is the current plan.
+    let dietPlan: DietPlan | null = shadow?.dietPlan ?? null;
+    if (isMember) {
+      const { data: dp } = await supabase
+        .from("diet_plan")
+        .select("current_food,summary,portion_per_day,meals,tips,source,created_at")
+        .eq("diary_id", diaryId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      dietPlan = dp
+        ? {
+            createdAt: dp.created_at,
+            currentFood: dp.current_food,
+            summary: dp.summary,
+            portionPerDay: dp.portion_per_day,
+            meals: dp.meals,
+            tips: dp.tips ?? [],
+            source: dp.source as DietSource,
+          }
+        : null;
+    }
+
     return {
       ...mapped,
-      dietPlan: shadow?.dietPlan ?? null,
+      dietPlan,
       groomingGuide: shadow?.groomingGuide ?? null,
       feedingLog,
       handover,
@@ -1435,6 +1533,7 @@ function buildDemoDiary(
       portionPerDay: plan.portionPerDay,
       meals: plan.meals,
       tips: ["Weigh portions with a scale.", "Keep treats to ~10% of the day."],
+      source: "templated",
     },
     groomingGuide: {
       createdAt: new Date().toISOString(),

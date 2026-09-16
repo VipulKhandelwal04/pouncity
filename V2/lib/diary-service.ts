@@ -130,6 +130,13 @@ export interface Diary {
   handover: HandoverState;
   createdAt: string;
   /**
+   * When the pet's plan-relevant details (species/breed/age/weight) last
+   * changed via Edit pet; null until the first such edit. The diet and
+   * grooming screens compare this to their plan's createdAt and offer a
+   * regenerate when the plan predates the change.
+   */
+  detailsUpdatedAt?: string | null;
+  /**
    * A seeded example the current person "helps with" — only exists because the
    * mock is single-browser and can't produce real cross-account caregiving.
    * Shown with a visible "Demo" marker; retires once the backend makes caregiving
@@ -314,13 +321,29 @@ function mirrorAccount(account: Account): void {
   write(ACCOUNTS_KEY, accounts);
 }
 
+/**
+ * The signed-in user's id from the locally stored session — no network hop,
+ * unlike auth.getUser(), which round-trips to the auth server on every call.
+ * Safe for filtering reads and gating navigation: RLS is the real enforcement
+ * boundary, so a stale local session can never read or write another
+ * account's data. Every screen mount resolves the user, so the hop mattered.
+ */
+async function sessionUserId(): Promise<string | null> {
+  const supabase = supabaseBrowser();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  return session?.user.id ?? null;
+}
+
 /** The signed-in account, or null when signed out. `name` is "" until captured. */
 export async function getAccount(): Promise<Account | null> {
   ensureMigrated();
   const supabase = supabaseBrowser();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return null;
   const { data } = await supabase
     .from("account")
@@ -433,15 +456,13 @@ export async function getMemberships(): Promise<Membership[]> {
 
 /** The diary id this account owns (the owner-app has exactly one), or null. */
 async function ownedDiaryId(): Promise<string | null> {
+  const userId = await sessionUserId();
+  if (!userId) return null;
   const supabase = supabaseBrowser();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
   const { data } = await supabase
     .from("membership")
     .select("diary_id")
-    .eq("account_id", user.id)
+    .eq("account_id", userId)
     .eq("role", "owner")
     .maybeSingle();
   return data?.diary_id ?? null;
@@ -519,6 +540,7 @@ type DiaryRow = {
   current_food: string | null;
   coat_type: string | null;
   created_at: string;
+  details_updated_at: string | null;
 };
 
 /** Map a `diary` table row to the seam's Diary shape (core fields only — the
@@ -553,6 +575,7 @@ async function mapDiaryRow(row: DiaryRow): Promise<Diary> {
     feedingLog: [],
     handover: { token: null, createdAt: null },
     createdAt: row.created_at,
+    detailsUpdatedAt: row.details_updated_at,
   };
 }
 
@@ -636,6 +659,16 @@ export async function updateDiary(patch: Partial<Diary>): Promise<Diary | null> 
   if (patch.registered !== undefined) updates.registered = patch.registered;
   if (patch.currentFood !== undefined) updates.current_food = patch.currentFood;
   if (patch.coatType !== undefined) updates.coat_type = patch.coatType;
+
+  // Diet plans and grooming guides are generated from species/breed/age/weight,
+  // so stamp when any of those actually change — the diet and grooming screens
+  // compare this against their plan's createdAt and offer a regenerate.
+  const detailsChanged =
+    (patch.species !== undefined && patch.species !== cur.species) ||
+    (patch.breed !== undefined && patch.breed !== cur.breed) ||
+    (patch.ageLabel !== undefined && patch.ageLabel !== cur.ageLabel) ||
+    (patch.weightKg !== undefined && patch.weightKg !== cur.weightKg);
+  if (detailsChanged) updates.details_updated_at = new Date().toISOString();
 
   if (patch.photoUrl !== undefined) {
     const resolved = await resolveUpload("pet-photos", cur.id, patch.photoUrl);
@@ -1370,15 +1403,13 @@ export async function diaryCaregiver(diaryId: string): Promise<Account | null> {
  * Caregiver membership onto Supabase too.
  */
 async function realMembershipRole(diaryId: string): Promise<Role | null> {
+  const userId = await sessionUserId();
+  if (!userId) return null;
   const supabase = supabaseBrowser();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
   const { data } = await supabase
     .from("membership")
     .select("role")
-    .eq("account_id", user.id)
+    .eq("account_id", userId)
     .eq("diary_id", diaryId)
     .maybeSingle();
   return (data?.role as Role | undefined) ?? null;
@@ -1387,14 +1418,11 @@ async function realMembershipRole(diaryId: string): Promise<Role | null> {
 export async function roleOnDiary(diaryId: string): Promise<Role | null> {
   const real = await realMembershipRole(diaryId);
   if (real) return real;
-  const supabase = supabaseBrowser();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const userId = await sessionUserId();
+  if (!userId) return null;
   // Real caregiver membership is now in Supabase (realMembershipRole, above).
   // The only rows left in the localStorage mock are DEMO caregiving pets.
-  const m = readMemberships().find((x) => x.accountId === user.id && x.diaryId === diaryId);
+  const m = readMemberships().find((x) => x.accountId === userId && x.diaryId === diaryId);
   return m?.role ?? null;
 }
 
@@ -1409,97 +1437,91 @@ export async function roleOnDiary(diaryId: string): Promise<Role | null> {
 export async function getDiaryById(diaryId: string): Promise<Diary | null> {
   ensureMigrated();
   const supabase = supabaseBrowser();
-  const { data: row } = await supabase.from("diary").select("*").eq("id", diaryId).maybeSingle();
-  if (row) {
+  // This runs on every screen's mount, so all independent reads go out as
+  // parallel batches — a sequential waterfall here was the bulk of the
+  // screen-to-screen loading time.
+  const [{ data: row }, role] = await Promise.all([
+    supabase.from("diary").select("*").eq("id", diaryId).maybeSingle(),
+    realMembershipRole(diaryId),
+  ]);
+  if (!row) return readDiaries()[diaryId] ?? null;
+
+  const shadow = readDiaries()[diaryId];
+  // A real member's downstream data lives in Postgres (cross-device); a
+  // demo/mock diary keeps the localStorage shadow.
+  if (!role) {
     const mapped = await mapDiaryRow(row as DiaryRow);
-    const shadow = readDiaries()[diaryId];
-    // A real member's downstream data lives in Postgres (cross-device); a
-    // demo/mock diary keeps the localStorage shadow. Computed once here.
-    const isMember = !!(await realMembershipRole(diaryId));
+    return {
+      ...mapped,
+      dietPlan: shadow?.dietPlan ?? null,
+      groomingGuide: shadow?.groomingGuide ?? null,
+      feedingLog: shadow?.feedingLog ?? [],
+      handover: shadow?.handover ?? { token: null, createdAt: null },
+    };
+  }
 
-    // Ticket 03: Feeding confirms.
-    let feedingLog = shadow?.feedingLog ?? [];
-    if (isMember) {
-      const { data: entries } = await supabase
-        .from("feeding_entry")
-        .select("fed_on,by_name,note")
-        .eq("diary_id", diaryId);
-      feedingLog = (entries ?? []).map((e) => ({
-        date: e.fed_on,
-        by: e.by_name,
-        note: e.note ?? undefined,
-      }));
-    }
-
-    // Ticket 04: the Handover link.
-    let handover: HandoverState = shadow?.handover ?? { token: null, createdAt: null };
-    if (isMember) {
-      const { data: tokenRow } = await supabase
+  // Tickets 03/04/07/08: feeding confirms, the Handover link, and the latest
+  // diet plan + grooming guide, alongside the row mapping (its Storage URL
+  // resolution is a network call too).
+  const [mapped, { data: entries }, { data: tokenRow }, { data: dp }, { data: gg }] =
+    await Promise.all([
+      mapDiaryRow(row as DiaryRow),
+      supabase.from("feeding_entry").select("fed_on,by_name,note").eq("diary_id", diaryId),
+      supabase
         .from("handover_token")
         .select("token,created_at")
         .eq("diary_id", diaryId)
         .eq("state", "active")
-        .maybeSingle();
-      handover = tokenRow
-        ? { token: tokenRow.token, createdAt: tokenRow.created_at }
-        : { token: null, createdAt: null };
-    }
-
-    // Ticket 07: the diet plan — latest row is the current plan.
-    let dietPlan: DietPlan | null = shadow?.dietPlan ?? null;
-    if (isMember) {
-      const { data: dp } = await supabase
+        .maybeSingle(),
+      supabase
         .from("diet_plan")
         .select("current_food,summary,portion_per_day,meals,tips,source,created_at")
         .eq("diary_id", diaryId)
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle();
-      dietPlan = dp
-        ? {
-            createdAt: dp.created_at,
-            currentFood: dp.current_food,
-            summary: dp.summary,
-            portionPerDay: dp.portion_per_day,
-            meals: dp.meals,
-            tips: dp.tips ?? [],
-            source: dp.source as DietSource,
-          }
-        : null;
-    }
-
-    // Ticket 08: the grooming guide — latest row is the current guide.
-    let groomingGuide: GroomingGuide | null = shadow?.groomingGuide ?? null;
-    if (isMember) {
-      const { data: gg } = await supabase
+        .maybeSingle(),
+      supabase
         .from("grooming_guide")
         .select("coat_type,frequency_weeks,summary,routine,professional,source,created_at")
         .eq("diary_id", diaryId)
         .order("created_at", { ascending: false })
         .limit(1)
-        .maybeSingle();
-      groomingGuide = gg
-        ? {
-            createdAt: gg.created_at,
-            coatType: gg.coat_type,
-            frequencyWeeks: gg.frequency_weeks,
-            summary: gg.summary,
-            routine: gg.routine ?? [],
-            professional: gg.professional,
-            source: gg.source as DietSource,
-          }
-        : null;
-    }
+        .maybeSingle(),
+    ]);
 
-    return {
-      ...mapped,
-      dietPlan,
-      groomingGuide,
-      feedingLog,
-      handover,
-    };
-  }
-  return readDiaries()[diaryId] ?? null;
+  return {
+    ...mapped,
+    feedingLog: (entries ?? []).map((e) => ({
+      date: e.fed_on,
+      by: e.by_name,
+      note: e.note ?? undefined,
+    })),
+    handover: tokenRow
+      ? { token: tokenRow.token, createdAt: tokenRow.created_at }
+      : { token: null, createdAt: null },
+    dietPlan: dp
+      ? {
+          createdAt: dp.created_at,
+          currentFood: dp.current_food,
+          summary: dp.summary,
+          portionPerDay: dp.portion_per_day,
+          meals: dp.meals,
+          tips: dp.tips ?? [],
+          source: dp.source as DietSource,
+        }
+      : null,
+    groomingGuide: gg
+      ? {
+          createdAt: gg.created_at,
+          coatType: gg.coat_type,
+          frequencyWeeks: gg.frequency_weeks,
+          summary: gg.summary,
+          routine: gg.routine ?? [],
+          professional: gg.professional,
+          source: gg.source as DietSource,
+        }
+      : null,
+  };
 }
 
 /**

@@ -29,29 +29,10 @@ export function HelpingWithList({ diaries }: { diaries: Diary[] }) {
               {d.breed} · {isFedToday(d) ? "fed today" : "not fed yet"}
             </span>
           </span>
-          {d.demo && <Chip>Demo</Chip>}
           <Chevron />
         </Link>
       ))}
     </div>
-  );
-}
-
-function Chip({ children }: { children: React.ReactNode }) {
-  return (
-    <span
-      className="mono"
-      style={{
-        padding: "5px 10px",
-        borderRadius: "var(--r-pill)",
-        border: "var(--border-thin)",
-        background: "var(--sun)",
-        color: "var(--ink)",
-        fontSize: "0.6rem",
-      }}
-    >
-      {children}
-    </span>
   );
 }
 

@@ -89,7 +89,7 @@ come from `V2/.env.local`:
 | `NEXT_PUBLIC_SUPABASE_URL` | public |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public |
 | `SUPABASE_SERVICE_ROLE_KEY` | secret — `/api/handover`, cron, analytics report |
-| `GEMINI_API_KEY` | secret — AI diet/grooming |
+| `GROQ_API_KEY` | secret — AI diet/grooming |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | public — push subscribe |
 | `VAPID_PRIVATE_KEY` | secret — push send (cron) |
 | `VAPID_SUBJECT` | e.g. `mailto:hello@<domain>` |
@@ -184,7 +184,7 @@ No data migration is involved in the flip, so rollback is just a redeploy.
   `push_subscription` rows).
 - Deferred niceties noted during the build: a "no diet plan yet" empty state for
   caregivers whose owner never made one; per-caregiver removal (v2);
-  Resend/Gemini/push spend monitoring.
+  Resend/Groq/push spend monitoring.
 
 ---
 
@@ -193,7 +193,7 @@ No data migration is involved in the flip, so rollback is just a redeploy.
 | Secret | Powers |
 |---|---|
 | `SUPABASE_SERVICE_ROLE_KEY` | public handover route, reminder cron, analytics report |
-| `GEMINI_API_KEY` | AI diet + grooming generation |
+| `GROQ_API_KEY` | AI diet + grooming generation |
 | `VAPID_PRIVATE_KEY` + `VAPID_SUBJECT` | sending web-push reminders (cron) |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | client push subscribe |
 | `CRON_SECRET` | authorizes `/api/cron/reminders` and `/api/analytics/report` |

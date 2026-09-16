@@ -961,7 +961,7 @@ export function generateDietPlan(diary: Diary, currentFood: string): DietPlan {
 }
 
 /**
- * Generate + save a diet plan. Tries the server AI route first (Gemini, keys
+ * Generate + save a diet plan. Tries the server AI route first (Groq, keys
  * server-only); on any failure — outage, guardrail rejection, non-2xx — falls
  * back to the templated generator, so the screen never hard-depends on the
  * model (ticket 07). `source` records which path produced it.
@@ -1100,7 +1100,7 @@ export function generateGroomingGuide(diary: Diary, coatType: string): GroomingG
 }
 
 /**
- * Generate + save a grooming guide. Tries the server AI route first (Gemini,
+ * Generate + save a grooming guide. Tries the server AI route first (Groq,
  * keys server-only); on any failure falls back to the templated generator, so
  * the screen never hard-depends on the model (ticket 08, mirrors requestDietPlan).
  */

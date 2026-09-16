@@ -363,7 +363,10 @@ const CSS = `
   z-index:0; white-space:nowrap; pointer-events:none;
   font-family:var(--font-display); font-weight:700;
   font-size:clamp(4rem,20vw,18rem); letter-spacing:-.02em; text-transform:uppercase;
-  color:#8F6500; /* the sun field's tonal ghost twin (Tonal Ghost Rule) */
+  /* Tonal ghost twin of the sun field, held faint like the home page's
+     ghost words (how-ghost is coral-ghost at .4) so the live "Come on in"
+     headline reads over it instead of competing with it. */
+  color:#8F6500; opacity:.4;
 }
 .signin-page .auth-stage{
   position:relative; z-index:1; width:100%; max-width:1120px; margin:0 auto;
@@ -442,11 +445,10 @@ const CSS = `
   .signin-page .auth-copy .reassure{align-items:center}
   .signin-page .auth-card{justify-self:center}
   .signin-page .peek{width:92px; top:-54px}
-  /* Once the stage stacks to one column, the poster ghost and the "COME ON IN"
-     headline are both sun-brown at poster scale and collide. The ghost is
-     decorative scenery (aria-hidden), so drop it on mobile and let the
-     headline carry the field. */
-  .signin-page .auth-ghost{display:none}
+  /* Kept as ghost writing on mobile (like the home page), just sized to fit
+     the single column and pinned above the stacked headline so it reads as a
+     faint backdrop word rather than colliding with it. */
+  .signin-page .auth-ghost{top:2%; font-size:clamp(3.4rem,17vw,7rem)}
   .signin-page .foot-top{grid-template-columns:1fr 1fr; gap:30px 24px}
   .signin-page .foot-brand{grid-column:1 / -1}
   .signin-page .assure{grid-template-columns:1fr; gap:24px}

@@ -42,7 +42,11 @@ export default function DiaryHome() {
       // "Helping with" list fill in after render rather than blocking it.
       const [acct, owned] = await Promise.all([getAccount(), getDiary()]);
       if (!acct) {
-        router.replace("/sign-in?next=" + encodeURIComponent("/diary"));
+        // The hub is the installed app's start_url, so a signed-out open lands
+        // on the landing page (which offers Sign in), not straight on sign-in.
+        // Deep screens keep their /sign-in?next= redirects: those preserve
+        // where a mid-flow visitor was headed.
+        router.replace("/");
         return;
       }
       if (!acct.name) {

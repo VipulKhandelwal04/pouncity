@@ -23,7 +23,7 @@ import {
  * - Signed-in Owner of this diary → sent to their own diary.
  * - Signed-in Caregiver of this diary → sent to its caregiver view.
  * - Signed-in without a membership → one-tap "Help with {pet}" (no re-auth).
- * - Signed out → sent to the real /sign-in page (magic link or Google), with
+ * - Signed out → sent to the real /sign-in page (Google), with
  *   `next` pointing back here, and returns to finish the join.
  *
  * IMPORTANT: getAccount() is called ALONE — a public route must not mint an

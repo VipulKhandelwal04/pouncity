@@ -34,7 +34,9 @@ function SignInView() {
   const next = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/diary";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cursorWord, setCursorWord] = useState("COME IN");
   const rootRef = useRef<HTMLDivElement>(null);
+  const curRef = useRef<HTMLDivElement>(null);
 
   async function google() {
     setBusy(true);
@@ -81,6 +83,46 @@ function SignInView() {
     };
   }, []);
 
+  // A short word trails the cursor: "COME IN" over the hero, "STAY" over the
+  // dark band. The spans are React-rendered (below) so React owns them; here we
+  // only move them on mousemove (a CSS transition gives the soft glide). Re-binds
+  // when the word changes, since the span count changes. Pointer-fine + motion-OK.
+  useEffect(() => {
+    const cur = curRef.current;
+    if (!cur) return;
+    if (!window.matchMedia("(pointer:fine)").matches) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const onMove = (e: MouseEvent) => {
+      const x = e.clientX + 20, y = e.clientY + 22;
+      const t = e.target as Element | null;
+      const over = !!(t && t.closest && t.closest("a,button,input"));
+      const spans = cur.children;
+      for (let i = 0; i < spans.length; i++) {
+        const s = spans[i] as HTMLElement;
+        s.style.transform = `translate(${x + i * 10}px, ${y}px)`;
+        s.style.opacity = over ? "0" : "1";
+      }
+    };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
+  }, [cursorWord]);
+
+  // Switch the trailing word based on which section is in view.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const en of entries) {
+          if (en.isIntersecting) setCursorWord(en.target.getAttribute("data-cursor") || "COME IN");
+        }
+      },
+      { threshold: 0.5 }
+    );
+    root.querySelectorAll<HTMLElement>("[data-cursor]").forEach((s) => io.observe(s));
+    return () => io.disconnect();
+  }, []);
+
   const paw = (
     <span className="dot" aria-hidden="true">
       <svg viewBox="0 0 34 30">
@@ -94,6 +136,13 @@ function SignInView() {
   return (
     <div className="signin-page" ref={rootRef}>
       <style>{CSS}</style>
+      <div className="cur" aria-hidden="true" ref={curRef}>
+        {[...cursorWord].map((ch, i) => (
+          <span key={cursorWord + i} style={{ transitionDelay: `${i * 0.018}s` }}>
+            {ch === " " ? " " : ch}
+          </span>
+        ))}
+      </div>
 
       <header className="si-header">
         <a className="wordmark" href="/">
@@ -106,7 +155,7 @@ function SignInView() {
       </header>
 
       <main>
-        <section className="s-auth">
+        <section className="s-auth" data-cursor="COME IN">
           <div className="auth-ghost" aria-hidden="true">Welcome</div>
           <div className="auth-stage">
             <div className="auth-copy">
@@ -161,7 +210,7 @@ function SignInView() {
           </div>
         </section>
 
-        <section className="s-close dome">
+        <section className="s-close dome" data-cursor="STAY">
           <div className="close-inner">
             <div className="assure">
               <div className="cell">
@@ -207,7 +256,7 @@ function SignInView() {
                 </div>
                 <div className="foot-col">
                   <h4>Say hi</h4>
-                  <a href="https://instagram.com" target="_blank" rel="noopener noreferrer">Instagram</a>
+                  <a href="https://www.instagram.com/pouncity" target="_blank" rel="noopener noreferrer">Instagram</a>
                   <a href="mailto:supportpouncity@gmail.com">supportpouncity@gmail.com</a>
                 </div>
               </div>
@@ -233,6 +282,11 @@ const CSS = `
 }
 .signin-page a{color:inherit}
 .signin-page .mono,.signin-page .wordmark{font-family:var(--font-display)}
+
+/* cursor word trail */
+.signin-page .cur{position:fixed; top:0; left:0; z-index:900; pointer-events:none; mix-blend-mode:difference}
+.signin-page .cur span{position:fixed; top:0; left:0; color:#fff; font:500 .82rem var(--font-mono); will-change:transform; opacity:0; transition:transform .14s ease-out, opacity .22s ease}
+@media (pointer:coarse){.signin-page .cur{display:none}}
 
 /* header */
 .signin-page .si-header{

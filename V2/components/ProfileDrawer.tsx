@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DetailShell } from "@/components/DetailShell";
 import {
-  getAccount,
   getDiary,
   updateProfile,
   removeDiary,
@@ -13,41 +11,59 @@ import {
   type Diary,
 } from "@/lib/diary-service";
 
-export default function ProfilePage() {
+/**
+ * The profile drawer — slides in from the right when the header's profile chip
+ * is tapped. Holds the account details (name, email, phone, emergency
+ * contact), Sign out, and the remove-pet flow with its two-step warning.
+ * Closes on the backdrop, the ✕, or Escape.
+ */
+export function ProfileDrawer({
+  account,
+  open,
+  onClose,
+  onAccountChange,
+}: {
+  account: Account;
+  open: boolean;
+  onClose: () => void;
+  onAccountChange: (a: Account) => void;
+}) {
   const router = useRouter();
-  const [account, setAccount] = useState<Account | null>(null);
   const [diary, setDiary] = useState<Diary | null>(null);
-  const [ready, setReady] = useState(false);
 
-  // details form
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [emergencyPhone, setEmergencyPhone] = useState("");
+  const [name, setName] = useState(account.name ?? "");
+  const [phone, setPhone] = useState(account.phone ?? "");
+  const [emergencyPhone, setEmergencyPhone] = useState(account.emergencyPhone ?? "");
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
-  // remove-pet flow
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [removeErr, setRemoveErr] = useState<string | null>(null);
 
+  // Re-seed the form and load the diary each time the drawer opens, so it
+  // always shows current values (the nav cache makes getDiary instant).
   useEffect(() => {
-    async function run() {
-      const [acct, d] = await Promise.all([getAccount(), getDiary()]);
-      if (!acct) {
-        router.replace("/sign-in?next=" + encodeURIComponent("/diary/profile"));
-        return;
-      }
-      setAccount(acct);
-      setDiary(d);
-      setName(acct.name ?? "");
-      setPhone(acct.phone ?? "");
-      setEmergencyPhone(acct.emergencyPhone ?? "");
-      setReady(true);
-    }
-    run();
-  }, [router]);
+    if (!open) return;
+    setName(account.name ?? "");
+    setPhone(account.phone ?? "");
+    setEmergencyPhone(account.emergencyPhone ?? "");
+    setSaveMsg(null);
+    setSaveErr(null);
+    setConfirming(false);
+    setRemoveErr(null);
+    getDiary().then(setDiary);
+  }, [open, account]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
   async function saveDetails() {
     if (!name.trim()) {
@@ -63,7 +79,7 @@ export default function ProfilePage() {
       setSaveErr("Couldn't save. Check your connection and try again.");
       return;
     }
-    setAccount(updated);
+    onAccountChange(updated);
     setSaveMsg("Saved.");
   }
 
@@ -82,6 +98,7 @@ export default function ProfilePage() {
         setRemoving(false);
         return;
       }
+      onClose();
       router.replace("/diary/create");
     } catch {
       setRemoveErr("Couldn't remove the diary. Try again in a moment.");
@@ -89,17 +106,62 @@ export default function ProfilePage() {
     }
   }
 
-  if (!ready || !account) {
-    return (
-      <main className="app-shell" style={{ paddingTop: 80, textAlign: "center" }}>
-        <span className="mono">Loading…</span>
-      </main>
-    );
-  }
-
   return (
-    <DetailShell title="Profile">
-      <div style={{ display: "grid", gap: 26 }}>
+    <div
+      aria-hidden={!open}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 1000,
+        pointerEvents: open ? "auto" : "none",
+      }}
+    >
+      {/* backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "rgba(31,26,22,0.35)",
+          opacity: open ? 1 : 0,
+          transition: "opacity .25s ease",
+        }}
+      />
+      {/* panel */}
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label="Your profile"
+        className="profile-drawer"
+        style={{
+          position: "absolute",
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: "min(420px, 92vw)",
+          background: "var(--cream)",
+          borderLeft: "var(--border)",
+          transform: open ? "translateX(0)" : "translateX(102%)",
+          transition: "transform .28s ease",
+          overflowY: "auto",
+          padding: "22px var(--gutter, 20px) 34px",
+          display: "grid",
+          gap: 26,
+          alignContent: "start",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h2 style={{ fontSize: "1.5rem", margin: 0 }}>Profile</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close profile"
+            className="pill pill--ghost pill--sm"
+          >
+            ✕
+          </button>
+        </div>
+
         {/* your details */}
         <section style={{ display: "grid", gap: 16 }}>
           <span className="mono" style={{ color: "var(--ink-72)" }}>
@@ -231,8 +293,8 @@ export default function ProfilePage() {
             )}
           </section>
         )}
-      </div>
-    </DetailShell>
+      </aside>
+    </div>
   );
 }
 

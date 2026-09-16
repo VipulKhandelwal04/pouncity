@@ -338,6 +338,30 @@ function mirrorAccount(account: Account): void {
   write(ACCOUNTS_KEY, accounts);
 }
 
+/* ---- in-memory nav cache -------------------------------------------------
+ * Every screen mount resolves the account and the diary, so without a cache
+ * each navigation pays the full network round-trips again and the screen sits
+ * on "Loading…". A short-TTL module cache makes repeat navigations render
+ * instantly. Correctness: getDiaryById ALWAYS fetches fresh and writes
+ * through, and every mutation in this file ends by calling it, so a write is
+ * never followed by a stale read in this tab. The TTL only bounds staleness
+ * from OTHER tabs/devices (e.g. a caregiver confirming a feed elsewhere).
+ */
+const NAV_CACHE_TTL_MS = 30_000;
+let accountCache: { userId: string; account: Account; at: number } | null = null;
+let ownedIdCache: { userId: string; id: string | null; at: number } | null = null;
+const diaryCache = new Map<string, { diary: Diary; at: number }>();
+
+function cacheFresh(at: number): boolean {
+  return Date.now() - at < NAV_CACHE_TTL_MS;
+}
+
+function bustNavCaches(): void {
+  accountCache = null;
+  ownedIdCache = null;
+  diaryCache.clear();
+}
+
 /**
  * The signed-in user's id from the locally stored session — no network hop,
  * unlike auth.getUser(), which round-trips to the auth server on every call.
@@ -362,6 +386,9 @@ export async function getAccount(): Promise<Account | null> {
   } = await supabase.auth.getSession();
   const user = session?.user;
   if (!user) return null;
+  if (accountCache && accountCache.userId === user.id && cacheFresh(accountCache.at)) {
+    return accountCache.account;
+  }
   const { data } = await supabase
     .from("account")
     .select("id,name,email,phone,emergency_phone")
@@ -379,6 +406,7 @@ export async function getAccount(): Promise<Account | null> {
       }
     : { id: user.id, name: "", email: user.email ?? "" };
   mirrorAccount(account);
+  accountCache = { userId: user.id, account, at: Date.now() };
   return account;
 }
 
@@ -414,6 +442,7 @@ export async function updateProfile(fields: {
     emergencyPhone: data.emergency_phone,
   };
   mirrorAccount(account);
+  accountCache = { userId, account, at: Date.now() }; // write-through
   return account;
 }
 
@@ -481,11 +510,13 @@ export async function setAccountName(name: string): Promise<Account | null> {
     .maybeSingle();
   if (!data) return null;
   mirrorAccount(data as Account);
+  accountCache = null; // partial column select — let the next getAccount refetch
   return data as Account;
 }
 
 /** Sign out of the real Supabase session. */
 export async function signOut(): Promise<void> {
+  bustNavCaches();
   const supabase = supabaseBrowser();
   await supabase.auth.signOut();
 }
@@ -514,6 +545,9 @@ export async function getMemberships(): Promise<Membership[]> {
 async function ownedDiaryId(): Promise<string | null> {
   const userId = await sessionUserId();
   if (!userId) return null;
+  if (ownedIdCache && ownedIdCache.userId === userId && cacheFresh(ownedIdCache.at)) {
+    return ownedIdCache.id;
+  }
   const supabase = supabaseBrowser();
   const { data } = await supabase
     .from("membership")
@@ -521,7 +555,9 @@ async function ownedDiaryId(): Promise<string | null> {
     .eq("account_id", userId)
     .eq("role", "owner")
     .maybeSingle();
-  return data?.diary_id ?? null;
+  const id = data?.diary_id ?? null;
+  ownedIdCache = { userId, id, at: Date.now() };
+  return id;
 }
 
 /* ---- diary read/write (Supabase, ticket 02) ------------------------------ */
@@ -639,6 +675,8 @@ async function mapDiaryRow(row: DiaryRow): Promise<Diary> {
 export async function getDiary(): Promise<Diary | null> {
   const id = await ownedDiaryId();
   if (!id) return null;
+  const hit = diaryCache.get(id);
+  if (hit && cacheFresh(hit.at)) return hit.diary;
   return getDiaryById(id);
 }
 
@@ -683,6 +721,7 @@ export async function createDiary(core: DiaryCore): Promise<Diary> {
     .from("membership")
     .insert({ account_id: user.id, diary_id: id, role: "owner" });
   if (memErr) throw memErr;
+  ownedIdCache = { userId: user.id, id, at: Date.now() }; // a cached "no diary" is now wrong
 
   if (core.photoUrl) {
     const path = await resolveUpload("pet-photos", id, core.photoUrl);
@@ -779,6 +818,9 @@ export async function removeDiary(): Promise<boolean> {
     .eq("id", id);
   if (error) throw error;
   if (!count) return false; // RLS refused — don't report a wipe that didn't happen
+
+  ownedIdCache = null;
+  diaryCache.delete(id);
 
   // Clear the local shadow + per-diary UI prefs for the removed diary.
   const diaries = readDiaries();
@@ -1555,6 +1597,10 @@ export async function getDiaryById(diaryId: string): Promise<Diary | null> {
     };
   }
 
+  // Members always get a FRESH read here (mutations end by calling this), and
+  // the result is written through to the nav cache so getDiary() serves the
+  // next screen mount instantly.
+
   // Tickets 03/04/07/08: feeding confirms, the Handover link, and the latest
   // diet plan + grooming guide, alongside the row mapping (its Storage URL
   // resolution is a network call too).
@@ -1584,7 +1630,7 @@ export async function getDiaryById(diaryId: string): Promise<Diary | null> {
         .maybeSingle(),
     ]);
 
-  return {
+  const result: Diary = {
     ...mapped,
     feedingLog: (entries ?? []).map((e) => ({
       date: e.fed_on,
@@ -1617,6 +1663,8 @@ export async function getDiaryById(diaryId: string): Promise<Diary | null> {
         }
       : null,
   };
+  diaryCache.set(diaryId, { diary: result, at: Date.now() });
+  return result;
 }
 
 /**

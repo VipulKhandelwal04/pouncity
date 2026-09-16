@@ -101,7 +101,7 @@ export default function FeedingDiaryPage() {
               <span
                 key={w}
                 className="mono"
-                style={{ textAlign: "center", color: "var(--ink-72)", fontSize: "0.56rem", paddingBottom: 4 }}
+                style={{ textAlign: "center", color: "var(--ink-72)", fontSize: "0.64rem", paddingBottom: 4 }}
               >
                 {w}
               </span>
@@ -120,6 +120,7 @@ export default function FeedingDiaryPage() {
                 >
                   <span
                     title={fed ? `Fed by ${entry?.by}${entry?.note ? ` · ${entry.note}` : ""}` : undefined}
+                    aria-label={fed ? `Fed by ${entry?.by}` : undefined}
                     style={{
                       width: "82%",
                       aspectRatio: "1",
@@ -181,7 +182,7 @@ export default function FeedingDiaryPage() {
               {monthEntries.length} fed {monthEntries.length === 1 ? "day" : "days"} in {monthLabel.split(" ")[0]}
             </span>
             {!atCurrentMonth && (
-              <button type="button" className="mono" onClick={toToday} style={{ color: "var(--coral-text)" }}>
+              <button type="button" className="mono tap-target" onClick={toToday} style={{ color: "var(--coral-text)" }}>
                 Jump to today
               </button>
             )}
@@ -232,7 +233,7 @@ function Legend({ swatch, children }: { swatch: React.ReactNode; children: React
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
       {swatch}
-      <span className="mono" style={{ fontSize: "0.56rem", color: "var(--ink-72)" }}>
+      <span className="mono" style={{ fontSize: "0.64rem", color: "var(--ink-72)" }}>
         {children}
       </span>
     </span>

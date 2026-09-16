@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Children, cloneElement, isValidElement, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   getDiary,
@@ -55,13 +55,45 @@ export function ProfileDrawer({
     getDiary().then(setDiary);
   }, [open, account]);
 
+  // Focus management for the modal drawer: opening moves focus inside (the
+  // close button), Tab is trapped within the panel, Escape closes, and
+  // closing returns focus to the opener.
+  const panelRef = useRef<HTMLElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!open) return;
+    openerRef.current = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      Array.from(
+        panelRef.current?.querySelectorAll<HTMLElement>(
+          'button, [href], input:not([disabled]), textarea, select, [tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      );
+    focusables()[0]?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const els = focusables();
+      if (els.length === 0) return;
+      const first = els[0];
+      const last = els[els.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey && (active === first || !panelRef.current?.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !panelRef.current?.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      openerRef.current?.focus();
+    };
   }, [open, onClose]);
 
   async function saveDetails() {
@@ -116,7 +148,7 @@ export function ProfileDrawer({
         style={{
           position: "absolute",
           inset: 0,
-          background: "rgba(31,26,22,0.35)",
+          background: "rgba(22,22,22,0.35)", // ink at 35%, not an off-token brown
           opacity: open ? 1 : 0,
           transition: "opacity .25s ease",
         }}
@@ -127,6 +159,7 @@ export function ProfileDrawer({
         aria-modal="true"
         aria-label="Your profile"
         className="profile-drawer"
+        ref={panelRef}
         style={{
           position: "absolute",
           top: 0,
@@ -136,9 +169,12 @@ export function ProfileDrawer({
           background: "var(--cream)",
           borderLeft: "var(--border)",
           transform: open ? "translateX(0)" : "translateX(102%)",
-          transition: "transform .28s ease",
+          // visibility keeps the closed drawer out of the tab order
+          visibility: open ? "visible" : "hidden",
+          transition: "transform .28s ease, visibility .28s",
           overflowY: "auto",
-          padding: "22px var(--gutter, 20px) 34px",
+          padding:
+            "calc(22px + env(safe-area-inset-top, 0px)) var(--gutter, 20px) calc(34px + env(safe-area-inset-bottom, 0px))",
           display: "grid",
           gap: 26,
           alignContent: "start",
@@ -174,7 +210,12 @@ export function ProfileDrawer({
             />
           </Field>
           <Field label="Email">
-            <input className="input" value={account.email} disabled aria-readonly="true" />
+            <input
+              className="input"
+              value={account.email}
+              readOnly
+              style={{ color: "var(--ink-72)" }}
+            />
             <p style={{ marginTop: 6, fontSize: "0.8rem", color: "var(--ink-72)" }}>
               Comes from your Google account, so it can't be changed here.
             </p>
@@ -279,10 +320,20 @@ export function ProfileDrawer({
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  // Bind the label to the first form control so screen readers announce it.
+  const id = useId();
+  let bound = false;
+  const kids = Children.map(children, (c) => {
+    if (!bound && isValidElement(c) && (c.type === "input" || c.type === "textarea" || c.type === "select")) {
+      bound = true;
+      return cloneElement(c as React.ReactElement<{ id?: string }>, { id });
+    }
+    return c;
+  });
   return (
     <div className="form-field" style={{ margin: 0 }}>
-      <label>{label}</label>
-      {children}
+      <label htmlFor={id}>{label}</label>
+      {kids}
     </div>
   );
 }

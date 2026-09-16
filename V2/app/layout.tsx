@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fredoka, DM_Sans, DM_Mono } from "next/font/google";
 import { BfcacheGuard } from "@/components/BfcacheGuard";
+import { PwaSetup } from "@/components/PwaSetup";
 import "./globals.css";
 
 const fredoka = Fredoka({
@@ -41,6 +42,9 @@ export const viewport: Viewport = {
   themeColor: "#FFF7E6",
   width: "device-width",
   initialScale: 1,
+  // Extend under the notch/home bar in the installed app, matching the
+  // marketing pages; safe-area padding in globals.css handles the insets.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -55,6 +59,7 @@ export default function RootLayout({
     >
       <body>
         <BfcacheGuard />
+        <PwaSetup />
         {children}
       </body>
     </html>

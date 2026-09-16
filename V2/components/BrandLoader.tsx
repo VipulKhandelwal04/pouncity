@@ -27,10 +27,10 @@ export function BrandLoader() {
           aria-hidden="true"
           style={{ display: "block" }}
         >
-          <circle cx="16" cy="16" r="13" fill="#FF6B4A" />
+          <circle cx="16" cy="16" r="13" fill="var(--coral)" />
           <path
             d="M4 12 Q16 20 28 10 M3 18 Q16 25 28 17 M6 25 Q17 29 25 22 M7 7 Q18 6 27 13"
-            stroke="#D8492B"
+            stroke="var(--coral-deep)"
             strokeWidth="2"
             fill="none"
             strokeLinecap="round"

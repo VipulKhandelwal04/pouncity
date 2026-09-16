@@ -211,8 +211,9 @@ function SignInView() {
             <div className="auth-card">
               <div className="peek" aria-hidden="true">
                 <svg viewBox="0 0 170 100">
-                  <ellipse cx="52" cy="42" rx="15" ry="26" transform="rotate(30 52 42)" fill="#161616" />
-                  <ellipse cx="118" cy="41" rx="14" ry="25" transform="rotate(-34 118 41)" fill="#161616" />
+                  {/* cat construction: triangle ears riding the head dome (not the dog-peek ellipses) */}
+                  <path d="M32 68 L38 12 L72 42 Z" fill="#161616" />
+                  <path d="M138 68 L132 12 L98 42 Z" fill="#161616" />
                   <path d="M28 100 C 28 52 52 42 85 42 C 118 42 142 52 142 100 Z" fill="#161616" />
                   <g className="eye"><circle className="ew" cx="62" cy="70" r="12" fill="#fff" /><circle className="pp" cx="62" cy="70" r="5" fill="#161616" /></g>
                   <g className="eye"><circle className="ew" cx="108" cy="70" r="12" fill="#fff" /><circle className="pp" cx="108" cy="70" r="5" fill="#161616" /></g>
@@ -354,12 +355,15 @@ const CSS = `
   z-index:1; min-height:100svh; display:flex; align-items:center;
   padding:calc(84px + 3vh) clamp(20px,4vw,48px) calc(var(--dome) + 6vh); overflow:clip;
 }
+/* standalone/PWA viewports run taller than the in-browser one; cap the section
+   on phones so the card composition stays tight (same fix as the landing hero) */
+@media (max-width:720px){.signin-page .s-auth{min-height:min(100svh,680px)}}
 .signin-page .auth-ghost{
   position:absolute; top:8%; left:50%; transform:translateX(-50%);
   z-index:0; white-space:nowrap; pointer-events:none;
   font-family:var(--font-display); font-weight:700;
   font-size:clamp(4rem,20vw,18rem); letter-spacing:-.02em; text-transform:uppercase;
-  color:#F2B92E;
+  color:#8F6500; /* the sun field's tonal ghost twin (Tonal Ghost Rule) */
 }
 .signin-page .auth-stage{
   position:relative; z-index:1; width:100%; max-width:1120px; margin:0 auto;
@@ -383,7 +387,6 @@ const CSS = `
 .signin-page .auth-card{
   position:relative; background:var(--panel); color:var(--ink);
   border:2.5px solid var(--ink); border-radius:26px;
-  box-shadow:8px 10px 0 rgba(22,22,22,.14);
   padding:clamp(22px,2.6vw,34px);
   display:flex; flex-direction:column; gap:16px;
   max-width:440px; width:100%; justify-self:end;

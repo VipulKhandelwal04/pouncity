@@ -33,9 +33,10 @@
  * buckets. Sign-in is real (email magic link, Google), scoped by
  * `V2/supabase/migrations/0002_account_diary_membership.sql`. Everything
  * downstream of a Diary that its OWN ticket hasn't landed yet — diet plan,
- * grooming guide, feeding log, the handover link, Caregiver membership,
- * Past Caregiver, Rating — still lives in the same localStorage mock as
- * before (tickets 03-06). `getDiaryById`/`getDiary` merge the two: Supabase
+ * grooming guide — still lives in the same localStorage mock as before
+ * (tickets 07-08). Feeding log, handover link, Caregiver membership (PR A),
+ * Past Caregiver + Rating (ticket 05 / PR B) are now on Supabase.
+ * `getDiaryById`/`getDiary` merge the two: Supabase
  * is the source of truth for a real diary's core fields; a localStorage
  * "shadow" entry under the same diary id supplies whatever those later
  * tickets haven't moved yet. This keeps every existing flow working
@@ -184,8 +185,6 @@ const ACCOUNTS_KEY = "pouncity_accounts_v1";
 const CURRENT_ACCOUNT_KEY = "pouncity_current_account_v1";
 const DIARIES_KEY = "pouncity_diaries_v1";
 const MEMBERSHIPS_KEY = "pouncity_memberships_v1";
-const PAST_CAREGIVERS_KEY = "pouncity_past_caregivers_v1"; // ADR-0006: retained on revoke
-const RATINGS_KEY = "pouncity_ratings_v1"; // private owner→caregiver feedback
 const NUDGE_KEY = "pouncity_nudge_dismissed_v1";
 // An anonymous per-browser fingerprint (ticket 04) so the public handover
 // route can dedupe repeat opens from the same visitor, before they have an
@@ -284,14 +283,6 @@ function readDiaries(): Record<string, Diary> {
 
 function readMemberships(): Membership[] {
   return read<Membership[]>(MEMBERSHIPS_KEY) ?? [];
-}
-
-function readPastCaregivers(): PastCaregiver[] {
-  return read<PastCaregiver[]>(PAST_CAREGIVERS_KEY) ?? [];
-}
-
-function readRatings(): Rating[] {
-  return read<Rating[]>(RATINGS_KEY) ?? [];
 }
 
 /** The single write path for a diary — keyed by id, so any diary can be persisted. */
@@ -1240,15 +1231,15 @@ export async function revokeHandoverLink(): Promise<Diary | null> {
     .eq("state", "active");
   if (error) throw error;
   // Unbind the real (Supabase) Caregiver: capture who's ending first (owner-reads
-  // RLS, 0005), retain them as a Past Caregiver, then delete the membership
-  // (owner-ends RLS). Past Caregiver retention still writes the localStorage mock
-  // until PR B (ticket 05) moves past_caregiver onto Supabase.
+  // RLS, 0005), retain them as a Past Caregiver (Supabase, 0007), then delete the
+  // membership (owner-ends RLS). Access is genuinely gone; only the Owner's
+  // private Past Caregiver record + any Rating remain.
   const { data: ending } = await supabase
     .from("membership")
     .select("account_id")
     .eq("diary_id", cur.id)
     .eq("role", "caregiver");
-  retainPastCaregivers(
+  await retainPastCaregivers(
     cur.id,
     (ending ?? []).map((m) => m.account_id)
   );
@@ -1265,16 +1256,17 @@ export async function revokeHandoverLink(): Promise<Diary | null> {
  * record per (account, diary): if they were revoked before, the timestamp moves
  * to this most-recent access-end rather than duplicating them.
  */
-function retainPastCaregivers(diaryId: string, accountIds: string[]): void {
+async function retainPastCaregivers(diaryId: string, accountIds: string[]): Promise<void> {
   if (accountIds.length === 0) return;
+  const supabase = supabaseBrowser();
   const now = new Date().toISOString();
-  const records = readPastCaregivers();
-  for (const accountId of accountIds) {
-    const existing = records.find((r) => r.accountId === accountId && r.diaryId === diaryId);
-    if (existing) existing.endedAt = now;
-    else records.push({ accountId, diaryId, endedAt: now });
-  }
-  write(PAST_CAREGIVERS_KEY, records);
+  // One record per (diary, account): re-revoking a returning helper moves
+  // ended_at forward rather than duplicating, via the (diary_id, account_id)
+  // unique constraint. Written by the Owner during revoke (owner-inserts RLS).
+  await supabase.from("past_caregiver").upsert(
+    accountIds.map((accountId) => ({ diary_id: diaryId, account_id: accountId, ended_at: now })),
+    { onConflict: "diary_id,account_id" }
+  );
 }
 
 /**
@@ -1286,17 +1278,35 @@ function retainPastCaregivers(diaryId: string, accountIds: string[]): void {
 export async function pastCaregivers(
   diaryId: string
 ): Promise<{ account: Account; endedAt: string }[]> {
-  const accounts = readAccounts();
-  const liveCaregiverIds = new Set(
-    readMemberships()
-      .filter((m) => m.diaryId === diaryId && m.role === "caregiver")
-      .map((m) => m.accountId)
-  );
-  return readPastCaregivers()
-    .filter((r) => r.diaryId === diaryId && !liveCaregiverIds.has(r.accountId))
-    .sort((a, b) => b.endedAt.localeCompare(a.endedAt))
-    .map((r) => ({ account: accounts[r.accountId], endedAt: r.endedAt }))
-    .filter((x): x is { account: Account; endedAt: string } => !!x.account);
+  const supabase = supabaseBrowser();
+  const { data: rows } = await supabase
+    .from("past_caregiver")
+    .select("account_id, ended_at")
+    .eq("diary_id", diaryId)
+    .order("ended_at", { ascending: false });
+  if (!rows || rows.length === 0) return [];
+  // Exclude anyone who has since rejoined as a live Caregiver — they're current,
+  // not past (owner-reads RLS lets the Owner see the current caregiver row).
+  const { data: live } = await supabase
+    .from("membership")
+    .select("account_id")
+    .eq("diary_id", diaryId)
+    .eq("role", "caregiver");
+  const liveIds = new Set((live ?? []).map((m) => m.account_id));
+  const past = rows.filter((r) => !liveIds.has(r.account_id));
+  if (past.length === 0) return [];
+  // Resolve names (Owner reads a past caregiver's account via 0007 RLS).
+  const { data: accts } = await supabase
+    .from("account")
+    .select("id,name,email")
+    .in("id", past.map((r) => r.account_id));
+  const byId = new Map((accts ?? []).map((a) => [a.id, a as Account]));
+  return past
+    .map((r) => {
+      const account = byId.get(r.account_id);
+      return account ? { account, endedAt: r.ended_at } : null;
+    })
+    .filter((x): x is { account: Account; endedAt: string } => !!x);
 }
 
 /* ---- private Ratings (owner → caregiver, ticket 07) --------------------- */
@@ -1313,14 +1323,26 @@ export async function getRating(
 ): Promise<Rating | null> {
   const acct = await getAccount();
   if (!acct) return null;
-  return (
-    readRatings().find(
-      (r) =>
-        r.ownerAccountId === acct.id &&
-        r.caregiverAccountId === caregiverAccountId &&
-        r.diaryId === diaryId
-    ) ?? null
-  );
+  const supabase = supabaseBrowser();
+  // RLS scopes `rating` to owner_account_id = auth.uid(), so a Caregiver can
+  // never read the Owner's rating of them — private by construction (ADR-0005).
+  // The explicit owner filter is belt-and-braces.
+  const { data } = await supabase
+    .from("rating")
+    .select("owner_account_id, caregiver_account_id, diary_id, stars, note, updated_at")
+    .eq("owner_account_id", acct.id)
+    .eq("caregiver_account_id", caregiverAccountId)
+    .eq("diary_id", diaryId)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    ownerAccountId: data.owner_account_id,
+    caregiverAccountId: data.caregiver_account_id,
+    diaryId: data.diary_id,
+    stars: data.stars,
+    note: data.note ?? undefined,
+    updatedAt: data.updated_at,
+  };
 }
 
 /**
@@ -1340,29 +1362,22 @@ export async function setRating(
   if (!acct) return null;
   const clean = Math.max(1, Math.min(5, Math.round(stars)));
   const trimmed = note.trim();
-  const ratings = readRatings();
-  const existing = ratings.find(
-    (r) =>
-      r.ownerAccountId === acct.id &&
-      r.caregiverAccountId === caregiverAccountId &&
-      r.diaryId === diaryId
-  );
-  const now = new Date().toISOString();
-  if (existing) {
-    existing.stars = clean;
-    existing.note = trimmed || undefined;
-    existing.updatedAt = now;
-  } else {
-    ratings.push({
-      ownerAccountId: acct.id,
-      caregiverAccountId,
-      diaryId,
+  const supabase = supabaseBrowser();
+  // Upsert on (owner, caregiver, diary): editing overwrites stars/note rather
+  // than adding a second row. Keyed by account ids, so it survives revoke and
+  // re-share. Owner-scoped by RLS (owner_account_id = auth.uid()).
+  const { error } = await supabase.from("rating").upsert(
+    {
+      owner_account_id: acct.id,
+      caregiver_account_id: caregiverAccountId,
+      diary_id: diaryId,
       stars: clean,
-      note: trimmed || undefined,
-      updatedAt: now,
-    });
-  }
-  write(RATINGS_KEY, ratings);
+      note: trimmed || null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "owner_account_id,caregiver_account_id,diary_id" }
+  );
+  if (error) return null;
   return getRating(caregiverAccountId, diaryId);
 }
 

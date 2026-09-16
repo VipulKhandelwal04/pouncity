@@ -204,7 +204,7 @@ function SignInView() {
               <ul className="reassure">
                 <li><span className="tick" aria-hidden="true">&#10003;</span> No passwords, just your Google account, one tap</li>
                 <li><span className="tick" aria-hidden="true">&#10003;</span> Set up your pet&rsquo;s diary in seconds</li>
-                <li><span className="tick" aria-hidden="true">&#10003;</span> Hand it to any sitter, no account needed</li>
+                <li><span className="tick" aria-hidden="true">&#10003;</span> Hand it to any sitter, they join with one Google tap</li>
               </ul>
             </div>
 
@@ -272,7 +272,7 @@ function SignInView() {
                   <span className="ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="3" fill="#FFF7E6" /><circle cx="18" cy="6" r="3" fill="#FFF7E6" /><circle cx="18" cy="18" r="3" fill="#FFF7E6" /><path d="M8.6 10.6 L15.4 7.4 M8.6 13.4 L15.4 16.6" stroke="#FFF7E6" strokeWidth="2" strokeLinecap="round" /></svg></span>
                   Hand-off, handled
                 </h3>
-                <p>Share the diary with any sitter by link, they see everything, no account needed.</p>
+                <p>Share the diary with any sitter by link, they sign in with Google in one tap and start helping.</p>
               </div>
             </div>
 

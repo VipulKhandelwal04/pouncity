@@ -154,6 +154,15 @@
     padding:calc(72px + 2vh) clamp(20px,4vw,48px) calc(var(--dome) + 4vh);
     overflow:clip;
   }
+  /* Installed-app (standalone) viewports run ~15% taller than the in-browser
+     one, so a full 100svh hero there stretches a void between the headline
+     and the dog and sinks the ledge to the screen's very edge. Cap the hero
+     on phones so the picture (headline, copy, dog on the ledge) stays one
+     tight composition; the cream dome peeking above the fold invites the
+     scroll. Desktop keeps the full-viewport hero. */
+  @media (max-width:720px){
+    .s-hero{min-height:min(100svh,680px)}
+  }
   .hero-stage{
     position:relative;flex:1;
     display:flex;flex-direction:column;align-items:center;

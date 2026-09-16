@@ -90,6 +90,8 @@ export interface GroomingGuide {
   summary: string;
   routine: string[];
   professional: string;
+  /** How it was produced (shared union with DietPlan): ai | templated | manual. */
+  source: DietSource;
 }
 
 export interface FeedingEntry {
@@ -956,16 +958,52 @@ export function generateGroomingGuide(diary: Diary, coatType: string): GroomingG
       "Check ears and teeth weekly.",
     ],
     professional,
+    source: "templated",
   };
 }
 
+/**
+ * Generate + save a grooming guide. Tries the server AI route first (Gemini,
+ * keys server-only); on any failure falls back to the templated generator, so
+ * the screen never hard-depends on the model (ticket 08, mirrors requestDietPlan).
+ */
 export async function requestGroomingGuide(coatType: string): Promise<Diary | null> {
   const cur = await getDiary();
   if (!cur) return null;
-  const guide = generateGroomingGuide(cur, coatType);
-  const next: Diary = { ...cur, coatType: guide.coatType, groomingGuide: guide };
-  writeDiary(next);
-  return next;
+  const coat = coatType.trim() || (cur.species === "dog" ? "medium coat" : "short coat");
+
+  let guide: GroomingGuide | null = null;
+  try {
+    const res = await fetch("/api/grooming-guide", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        species: cur.species,
+        breed: cur.breed,
+        ageLabel: cur.ageLabel,
+        coatType: coat,
+      }),
+    });
+    if (res.ok) {
+      const { guide: g } = (await res.json()) as {
+        guide: { summary: string; frequencyWeeks: number; routine: string[]; professional: string };
+      };
+      guide = {
+        createdAt: new Date().toISOString(),
+        coatType: coat,
+        frequencyWeeks: g.frequencyWeeks,
+        summary: g.summary,
+        routine: g.routine,
+        professional: g.professional,
+        source: "ai",
+      };
+    }
+  } catch {
+    // network error — fall through to the templated guide below
+  }
+
+  if (!guide) guide = generateGroomingGuide(cur, coat); // templated fallback
+  return persistGroomingGuide(cur.id, coat, guide);
 }
 
 /** The manual alternative to AI generation — the owner writes the guide themselves. */
@@ -991,8 +1029,39 @@ export async function saveGroomingGuide(fields: {
     routine: (fields.routine ?? []).map((t) => t.trim()).filter(Boolean),
     professional:
       fields.professional?.trim() || `A professional groom about every ${freq} weeks helps.`,
+    source: "manual",
   };
-  const next: Diary = { ...cur, coatType: coat, groomingGuide: guide };
+  return persistGroomingGuide(cur.id, coat, guide);
+}
+
+/**
+ * The single write path for a grooming guide (mirrors persistDietPlan). A real
+ * Owner's guide is a new row in Supabase `grooming_guide` (latest = current) and
+ * the diary's coat_type is updated alongside; a demo/mock diary keeps the shadow.
+ */
+async function persistGroomingGuide(
+  diaryId: string,
+  coatType: string,
+  guide: GroomingGuide
+): Promise<Diary | null> {
+  if (await realMembershipRole(diaryId)) {
+    const supabase = supabaseBrowser();
+    await supabase.from("diary").update({ coat_type: coatType }).eq("id", diaryId);
+    const { error } = await supabase.from("grooming_guide").insert({
+      diary_id: diaryId,
+      coat_type: coatType,
+      frequency_weeks: guide.frequencyWeeks,
+      summary: guide.summary,
+      routine: guide.routine,
+      professional: guide.professional,
+      source: guide.source,
+    });
+    if (error) throw error;
+    return getDiaryById(diaryId);
+  }
+  const cur = await getDiaryById(diaryId);
+  if (!cur) return null;
+  const next: Diary = { ...cur, coatType, groomingGuide: guide };
   writeDiary(next);
   return next;
 }
@@ -1268,10 +1337,33 @@ export async function getDiaryById(diaryId: string): Promise<Diary | null> {
         : null;
     }
 
+    // Ticket 08: the grooming guide — latest row is the current guide.
+    let groomingGuide: GroomingGuide | null = shadow?.groomingGuide ?? null;
+    if (isMember) {
+      const { data: gg } = await supabase
+        .from("grooming_guide")
+        .select("coat_type,frequency_weeks,summary,routine,professional,source,created_at")
+        .eq("diary_id", diaryId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      groomingGuide = gg
+        ? {
+            createdAt: gg.created_at,
+            coatType: gg.coat_type,
+            frequencyWeeks: gg.frequency_weeks,
+            summary: gg.summary,
+            routine: gg.routine ?? [],
+            professional: gg.professional,
+            source: gg.source as DietSource,
+          }
+        : null;
+    }
+
     return {
       ...mapped,
       dietPlan,
-      groomingGuide: shadow?.groomingGuide ?? null,
+      groomingGuide,
       feedingLog,
       handover,
     };
@@ -1550,6 +1642,7 @@ function buildDemoDiary(
         species === "cat"
           ? `Most cats self-groom, but a ${groom.coatType} mats easily, so a professional groom about every ${groom.frequencyWeeks} weeks helps.`
           : `A professional groom about every ${groom.frequencyWeeks} weeks keeps the coat and nails in shape.`,
+      source: "templated",
     },
     feedingLog: [{ date: today(), by: ownerName }],
     handover: { token: "h_" + id, createdAt: new Date().toISOString() },

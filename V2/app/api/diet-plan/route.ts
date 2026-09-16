@@ -53,12 +53,22 @@ export async function POST(request: Request) {
       schema: suggestionSchema,
       system:
         "You are a calm, practical pet-care assistant giving general everyday feeding guidance for a HEALTHY pet. " +
-        "Give maintenance guidance only. NEVER suggest a prescription, therapeutic, or veterinary condition-specific " +
-        "diet, and never diagnose a condition. `portionGramsPerDay` is approximate daily dry-food grams.",
+        "Tailor the plan to THIS pet:\n" +
+        "- WEIGHT drives the daily portion (approximate maintenance energy for that body size).\n" +
+        "- AGE sets life stage and meal frequency: puppies and kittens need more frequent, smaller meals and more energy per kg; adults are steady; seniors usually need slightly less.\n" +
+        "- BREED informs size class, typical energy level, and body-condition tendencies (some breeds gain weight easily).\n" +
+        "Give MAINTENANCE guidance only. NEVER suggest a prescription, therapeutic, or veterinary condition-specific diet, and never diagnose a condition. " +
+        "Write plainly and warmly. Do NOT use em dashes anywhere; use commas or short separate sentences. " +
+        "`portionGramsPerDay` is the approximate daily dry-food grams for this pet.",
       prompt:
-        `Pet: ${species}, breed ${breed || "unknown"}, age ${ageLabel || "unknown"}, ` +
-        `weight ${weightKg ?? "unknown"} kg, currently eating ${currentFood || `a complete ${species} food`}. ` +
-        "Give a short feeding plan: a one-sentence summary, approximate daily grams, meals per day, and 3-4 practical tips.",
+        "Pet details:\n" +
+        `- Species: ${species}\n` +
+        `- Breed: ${breed || "unknown"}\n` +
+        `- Age: ${ageLabel || "unknown"}\n` +
+        `- Weight: ${weightKg ?? "unknown"} kg\n` +
+        `- Currently eating: ${currentFood || `a complete ${species} food`}\n\n` +
+        "Give a short feeding plan tailored to this pet's breed, age, and weight: a one-sentence summary, " +
+        "the approximate daily grams (portionGramsPerDay), meals per day suited to the life stage, and 3 to 4 practical, specific tips.",
     });
 
     const guarded = applyDietGuardrail(object, { species, weightKg });

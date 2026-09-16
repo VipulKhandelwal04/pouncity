@@ -52,6 +52,21 @@ const GRAMS_PER_KG: Record<Species, [number, number]> = {
   cat: [12, 30],
 };
 
+/**
+ * Strip em dashes from model copy — the brand forbids them (classic AI slop).
+ * En dashes in numeric ranges like "4-6 weeks" are allowed and left untouched;
+ * only the em dash (U+2014), horizontal bar (U+2015), and spaced double-hyphens
+ * are replaced (with a comma), then whitespace and doubled commas are tidied.
+ */
+function noEmDash(s: string): string {
+  return s
+    .replace(/\s*[—―]\s*/g, ", ")
+    .replace(/ -- /g, ", ")
+    .replace(/\s*,\s*,\s*/g, ", ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function applyDietGuardrail(
   raw: RawDietSuggestion,
   ctx: DietGuardrailContext
@@ -60,8 +75,8 @@ export function applyDietGuardrail(
   const hit = PRESCRIPTION_PATTERNS.find((p) => p.test(haystack));
   if (hit) return { ok: false, reason: `prescription-style content matched ${hit}` };
 
-  const summary = (raw.summary ?? "").trim();
-  const meals = (raw.meals ?? "").trim();
+  const summary = noEmDash((raw.summary ?? "").trim());
+  const meals = noEmDash((raw.meals ?? "").trim());
   if (!summary && !meals) return { ok: false, reason: "empty suggestion" };
 
   const defaultWeight = ctx.species === "dog" ? 15 : 4;
@@ -79,7 +94,7 @@ export function applyDietGuardrail(
     summary,
     portionPerDay: `About ${grams} g of dry food a day`,
     meals: meals || "2 meals, morning and evening",
-    tips: (raw.tips ?? []).map((t) => t.trim()).filter(Boolean).slice(0, 6),
+    tips: (raw.tips ?? []).map((t) => noEmDash(t.trim())).filter(Boolean).slice(0, 6),
     clamped: grams !== requested,
   };
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createGoogle } from "@ai-sdk/google";
+import { createGroq } from "@ai-sdk/groq";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -7,12 +7,12 @@ import { applyGroomingGuardrail } from "@/lib/grooming-guardrail";
 
 /**
  * Server-side AI grooming generation (ticket 08), the same shape as the diet
- * route (ticket 07): keeps the Gemini key off the client, generates a structured
+ * route (ticket 07): keeps the AI key off the client, generates a structured
  * guide, runs the guardrail, and returns a guide or an error (on which the seam
- * falls back to the templated generator). Provider is Gemini via Google AI
- * Studio; the key is read from GEMINI_API_KEY.
+ * falls back to the templated generator). Provider is Groq (model
+ * openai/gpt-oss-120b); the key is read from GROQ_API_KEY.
  */
-const google = createGoogle({ apiKey: process.env.GEMINI_API_KEY });
+const groq = createGroq({ apiKey: process.env.GROQ_API_KEY });
 
 const suggestionSchema = z.object({
   summary: z.string(),
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  if (!process.env.GEMINI_API_KEY) {
+  if (!process.env.GROQ_API_KEY) {
     return NextResponse.json({ error: "ai_unavailable" }, { status: 503 });
   }
 
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
   try {
     const { object } = await generateObject({
-      model: google("gemini-flash-latest"),
+      model: groq("openai/gpt-oss-120b"),
       schema: suggestionSchema,
       system:
         "You are a calm, practical pet-care assistant giving general everyday grooming guidance for a HEALTHY pet. " +

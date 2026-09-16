@@ -19,21 +19,31 @@ in order. Nothing here touches production until **Phase 5**.
   Supabase project **`jpikxumahmhgtqpliqho`** (migrations `0002`–`0011` applied).
   It serves marketing at `/` (via `V2/public/*.html` + rewrites) and the app at
   `/diary`, `/care/[id]`, `/d/[token]`, `/sign-in`.
-- **Auth email** = Resend in **test mode** → it only delivers to your own Resend
-  address. **This is the #1 external blocker.**
+- **Sign-in = Google only** (PR #21). Email sign-in (magic link / one-time code)
+  is intentionally disabled at launch: Resend has no verified sending domain, so
+  it cannot deliver to external addresses. Re-enabling email later is UI-only —
+  the `requestMagicLink` / `verifyEmailCode` seam is still in `diary-service`.
 - Everything runs locally via `V2/.env.local`; **nothing is set in Vercel yet**.
 
 ---
 
 ## 1. Prerequisites (off-production; the long pole)
 
-### 1a. 🔴 Buy + verify a sending domain in Resend  — the real blocker
-External users cannot receive a sign-in code until this is done.
-1. Buy a domain (e.g. `pouncity.app`) — Cloudflare / Porkbun / Namecheap, or
-   Vercel → Domains.
-2. Resend → **Domains → Add Domain** → add the SPF / DKIM / DMARC DNS records it
-   gives you at your registrar → wait for **Verified**.
-3. Note the sender you'll use, e.g. `noreply@pouncity.app`.
+### 1a. 🔴 Configure Google sign-in — the real blocker
+With email disabled, **Google is the only way in**, so this gates the launch:
+1. Google Cloud Console → create an OAuth 2.0 Client (Web application).
+2. Authorized redirect URIs must include both
+   `https://jpikxumahmhgtqpliqho.supabase.co/auth/v1/callback` and
+   `<PROD_ORIGIN>/auth/callback`.
+3. **OAuth consent screen must be "In production" (published), NOT "Testing"** —
+   in Testing mode only whitelisted test users can sign in, which blocks every
+   external user (the whole audience of this launch).
+4. Supabase → Auth → Providers → **Google** → paste the Client ID + secret, enable.
+
+> **(Deferred) Resend sending domain** — not needed for a Google-only launch.
+> Only when you want the email sign-in path back: buy a domain, Resend → Domains →
+> Add Domain → add SPF / DKIM / DMARC → **Verified**, set the sender, then restore
+> the email form on `/sign-in`.
 
 ### 1b. Decide the public URL
 Either keep `pouncity.vercel.app`, or point the custom domain at the Vercel
@@ -51,14 +61,13 @@ put your real pilot beliefs there (wording only; no code change).
 - **Auth → URL Configuration**
   - Site URL = `<PROD_ORIGIN>`
   - Redirect URLs += `<PROD_ORIGIN>/**` (covers `/auth/callback`)
-- **Auth → SMTP settings** → sender = `noreply@<verified-domain>` (from 1a).
-- **Auth → Providers → Email** → Email OTP length **6**, OTP expiry ~10 min,
-  identity linking on. Keep **email confirmations OFF** (or, if on, make sure the
-  **Confirm signup** template includes `{{ .Token }}`).
-- **Auth → Email templates → Magic Link** already has `{{ .Token }}` +
-  `{{ .ConfirmationURL }}`. Leave it.
-- **Google sign-in** (if you keep it): add `<PROD_ORIGIN>/auth/callback` to the
-  Google Cloud OAuth client's redirect URIs and to Supabase's Google provider.
+- **Auth → Providers → Google (required)** — the only sign-in at launch. Confirm
+  the provider from 1a is enabled, and that both `<PROD_ORIGIN>/auth/callback` and
+  the Supabase callback URL are on the OAuth client, with the consent screen "In
+  production".
+- **(Deferred — email path)** SMTP sender, Email OTP length/expiry, and the Magic
+  Link template only matter once you re-enable the email form; skip them for a
+  Google-only launch.
 - Re-run **Advisors → Security**; confirm no ERROR-level findings (the SECURITY
   DEFINER WARNs on `is_diary_owner` / `is_my_caregiver` / `is_my_past_caregiver` /
   `handle_new_user` are intentional and safe).
@@ -94,8 +103,9 @@ Deploy V2 to a preview (the existing **`pouncity-preview`** project, or a Vercel
 preview) with the **same env vars**, then walk the core flows by hand — these are
 the paths verified only at the DB/seam level, never through a real browser:
 
-- [ ] Sign up with a **real external email** → code arrives (proves 1a) → land on
-      `/diary/welcome` → set name.
+- [ ] Sign in with **Google, using a real external account** (not your own, not a
+      whitelisted test user — this proves 1a and that the consent screen is
+      published) → land on `/diary/welcome` → set name.
 - [ ] Create a diary → hub renders.
 - [ ] Feeding tap → mark fed; open on a second device → shows fed (cross-device).
 - [ ] Diet plan: generate (AI) → a plan appears, disclaimer shown; check copy has
@@ -126,9 +136,10 @@ Fix anything that breaks here **before** Phase 5.
      `/`→`/join-waitlist` redirect stop applying, because the build root is `V2/`.
    - V2 serves marketing at `/` (from `V2/public/*.html` + its rewrites) and the
      app at `/diary`, so the whole site is one deploy.
-2. **Verify `V2/public/{index,sign-in,join-waitlist}.html` are the marketing you
-   want live** (they're real copies that can drift from the repo-root versions —
-   reconcile if needed).
+2. **Verify `V2/public/index.html` is the marketing you want live** (it's a real
+   copy that can drift from the repo-root version — reconcile if needed). Note
+   `sign-in.html` and `join-waitlist.html` were removed in PR #21: `/sign-in` is
+   the React app route, and `/join-waitlist` now 307-redirects to `/`.
 3. Trigger a production deploy (Vercel → Redeploy, or push a trivial commit to
    `main`).
 
@@ -147,7 +158,7 @@ just as reversible.
 - [ ] `<PROD_ORIGIN>/` serves the app's marketing home (not a 307 to
       `/join-waitlist`).
 - [ ] `/sign-in`, `/diary`, `/d/<token>` all load.
-- [ ] A **real external** person can sign up and receive the email.
+- [ ] A **real external** person can sign in with Google (a non-test account).
 - [ ] Vercel → **Cron** tab shows the `/api/cron/reminders` job scheduled; check
       its logs after the first run (or trigger it manually with `CRON_SECRET`).
 - [ ] Supabase → Logs + Advisors look clean under real traffic.
@@ -186,4 +197,5 @@ No data migration is involved in the flip, so rollback is just a redeploy.
 | `VAPID_PRIVATE_KEY` + `VAPID_SUBJECT` | sending web-push reminders (cron) |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | client push subscribe |
 | `CRON_SECRET` | authorizes `/api/cron/reminders` and `/api/analytics/report` |
-| Resend verified domain | delivering sign-in emails to external users |
+| Google OAuth (Supabase provider + Google Cloud client) | the only sign-in at launch |
+| Resend verified domain | (deferred) delivering sign-in emails if/when email is re-enabled |

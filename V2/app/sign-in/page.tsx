@@ -376,7 +376,11 @@ const CSS = `
 .signin-page h1.poster{
   font-family:var(--font-display); font-weight:700;
   font-size:clamp(2.9rem,7vw,5.6rem); line-height:.95; letter-spacing:-.015em;
-  text-transform:uppercase; color:var(--sun-ghost); margin:0;
+  /* ink, so the live headline reads cleanly OVER the faint "Welcome" ghost
+     (matching the home page, where ink headings sit over ghost words); the
+     old sun-ghost color made it the same hue as the ghost and they collided */
+  text-transform:uppercase; color:var(--ink); margin:0;
+  position:relative; z-index:1;
 }
 .signin-page .auth-copy p{margin:20px 0 0; max-width:34ch; font-size:clamp(1rem,1.35vw,1.18rem); font-weight:500}
 .signin-page .auth-copy .reassure{list-style:none; margin:26px 0 0; padding:0; display:flex; flex-direction:column; gap:11px}

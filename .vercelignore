@@ -1,4 +1,0 @@
-# Work-in-progress signed-in owner app (V2). Committed to GitHub for versioning
-# but deliberately NOT deployed — it is still being built. Excluded from every
-# Vercel deployment so pushing it never touches the live marketing site.
-V2

@@ -1,5 +1,7 @@
 "use client";
 
+import { BrandLoader } from "@/components/BrandLoader";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Wordmark } from "@/components/Wordmark";
@@ -31,11 +33,7 @@ export default function CreatePage() {
   }, [router]);
 
   if (!ready) {
-    return (
-      <main className="app-shell" style={{ paddingTop: 80, textAlign: "center" }}>
-        <span className="mono">Loading…</span>
-      </main>
-    );
+    return <BrandLoader />;
   }
 
   return (

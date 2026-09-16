@@ -343,8 +343,10 @@ function mirrorAccount(account: Account): void {
  * each navigation pays the full network round-trips again and the screen sits
  * on "Loading…". The cache serves whatever it holds INSTANTLY; an entry older
  * than the TTL is refreshed in the background for the next read rather than
- * blocking this one. It is also persisted to sessionStorage (per-tab, cleared
- * when the tab closes) so even a reload paints from the last-known state.
+ * blocking this one. It is also persisted to localStorage so a reload — or a
+ * fresh launch of the installed app — paints from the last-known state
+ * immediately (sign-out clears it; the legacy account mirror already keeps
+ * the same fields in localStorage, so this adds no new data surface).
  * Correctness: getDiaryById ALWAYS fetches fresh and writes through, and
  * every mutation in this file ends by calling it, so a write is never
  * followed by a stale read in this tab. Staleness from OTHER tabs/devices
@@ -372,19 +374,19 @@ function revalidate(key: string, fn: () => Promise<unknown>): void {
     .finally(() => revalidating.delete(key));
 }
 
-/** Persist the current cache to sessionStorage (best-effort optimization). */
+/** Persist the current cache to localStorage (best-effort optimization). */
 function persistNav(): void {
   if (!hasWindow()) return;
   try {
     const userId = accountCache?.userId ?? ownedIdCache?.userId;
     if (!userId) {
-      window.sessionStorage.removeItem(NAV_CACHE_KEY);
+      window.localStorage.removeItem(NAV_CACHE_KEY);
       return;
     }
     const ownedId =
       ownedIdCache && ownedIdCache.userId === userId ? ownedIdCache.id : undefined;
     const diary = ownedId ? (diaryCache.get(ownedId)?.diary ?? null) : null;
-    window.sessionStorage.setItem(
+    window.localStorage.setItem(
       NAV_CACHE_KEY,
       JSON.stringify({ userId, account: accountCache?.account ?? null, ownedId, diary })
     );
@@ -393,13 +395,13 @@ function persistNav(): void {
   }
 }
 
-/** Seed the in-memory cache from sessionStorage, once, as STALE entries
+/** Seed the in-memory cache from localStorage, once, as STALE entries
  *  (at: 0) — served instantly, refreshed in the background. */
-function seedNavFromSession(userId: string): void {
+function seedNavFromStorage(userId: string): void {
   if (navSeeded || !hasWindow()) return;
   navSeeded = true;
   try {
-    const raw = window.sessionStorage.getItem(NAV_CACHE_KEY);
+    const raw = window.localStorage.getItem(NAV_CACHE_KEY);
     if (!raw) return;
     const p = JSON.parse(raw) as {
       userId?: string;
@@ -425,7 +427,7 @@ function bustNavCaches(): void {
   navSeeded = false;
   if (hasWindow()) {
     try {
-      window.sessionStorage.removeItem(NAV_CACHE_KEY);
+      window.localStorage.removeItem(NAV_CACHE_KEY);
     } catch {
       /* ignore */
     }
@@ -494,7 +496,7 @@ export async function getAccount(): Promise<Account | null> {
   } = await supabase.auth.getSession();
   const user = session?.user;
   if (!user) return null;
-  seedNavFromSession(user.id);
+  seedNavFromStorage(user.id);
   if (accountCache && accountCache.userId === user.id) {
     if (!cacheFresh(accountCache.at)) revalidate("account", () => fetchAccount(user));
     return accountCache.account;
@@ -644,7 +646,7 @@ async function fetchOwnedId(userId: string): Promise<string | null> {
 async function ownedDiaryId(): Promise<string | null> {
   const userId = await sessionUserId();
   if (!userId) return null;
-  seedNavFromSession(userId);
+  seedNavFromStorage(userId);
   if (ownedIdCache && ownedIdCache.userId === userId) {
     if (!cacheFresh(ownedIdCache.at)) revalidate("ownedId", () => fetchOwnedId(userId));
     return ownedIdCache.id;

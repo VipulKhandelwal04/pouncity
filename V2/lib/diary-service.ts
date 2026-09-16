@@ -425,10 +425,12 @@ export async function getMemberships(): Promise<Membership[]> {
     diaryId: m.diary_id,
     role: m.role as Role,
   }));
-  const caregiverMock = readMemberships().filter(
+  // Real caregiver memberships now come from Supabase (above); the localStorage
+  // mock only still holds DEMO caregiving pets (single-browser demo seed).
+  const demoCaregiver = readMemberships().filter(
     (m) => m.accountId === acct.id && m.role === "caregiver"
   );
-  return [...owned, ...caregiverMock];
+  return [...owned, ...demoCaregiver];
 }
 
 /** The diary id this account owns (the owner-app has exactly one), or null. */
@@ -1062,11 +1064,28 @@ export async function resolveCode(code: string): Promise<string | null> {
   return token;
 }
 
-/** The pet's single current Caregiver (ADR-0007: one at a time), or null. */
+/**
+ * The pet's single current Caregiver (ADR-0007: one at a time), or null.
+ * Owner-only in practice: RLS (0005) lets the diary's Owner read the caregiver's
+ * membership + account; a non-owner caller gets null (they can't see who else
+ * helps). Preventing a second caregiver relies on the DB's 1:1 unique index,
+ * not on this read.
+ */
 export async function diaryCaregiver(diaryId: string): Promise<Account | null> {
-  const accounts = readAccounts();
-  const m = readMemberships().find((x) => x.diaryId === diaryId && x.role === "caregiver");
-  return m ? accounts[m.accountId] ?? null : null;
+  const supabase = supabaseBrowser();
+  const { data: m } = await supabase
+    .from("membership")
+    .select("account_id")
+    .eq("diary_id", diaryId)
+    .eq("role", "caregiver")
+    .maybeSingle();
+  if (!m) return null;
+  const { data: a } = await supabase
+    .from("account")
+    .select("id,name,email")
+    .eq("id", m.account_id)
+    .maybeSingle();
+  return a ? { id: a.id, name: a.name, email: a.email } : null;
 }
 
 /** The signed-in account's role on a given diary, or null if they have none. */
@@ -1101,8 +1120,8 @@ export async function roleOnDiary(diaryId: string): Promise<Role | null> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
-  // Caregiver membership for a demo/mock diary still lives in localStorage
-  // until ticket 04/06 moves it onto Supabase too.
+  // Real caregiver membership is now in Supabase (realMembershipRole, above).
+  // The only rows left in the localStorage mock are DEMO caregiving pets.
   const m = readMemberships().find((x) => x.accountId === user.id && x.diaryId === diaryId);
   return m?.role ?? null;
 }
@@ -1179,26 +1198,24 @@ export async function joinAsCaregiver(token: string): Promise<Membership | null>
   if (!acct) return null;
   const target = await resolveHandoverGate(token);
   if (!target) return null;
-  const existing = readMemberships().find(
-    (m) => m.accountId === acct.id && m.diaryId === target.diaryId
-  );
-  if (existing) return existing.role === "caregiver" ? existing : null;
-  // 1:1 (ADR-0007): a pet has at most one Caregiver at a time. `existing` already
-  // covered this account, so any caregiver row left here belongs to someone else —
-  // reject; the Owner ends that care before a new helper can take the spot.
-  const occupied = readMemberships().some(
-    (m) => m.diaryId === target.diaryId && m.role === "caregiver"
-  );
-  if (occupied) return null;
-  const membership: Membership = {
-    accountId: acct.id,
-    diaryId: target.diaryId,
-    role: "caregiver",
-  };
-  const all = readMemberships();
-  all.push(membership);
-  write(MEMBERSHIPS_KEY, all);
-  return membership;
+  // Never bind the diary's Owner as a Caregiver of their own pet (roleOnDiary is
+  // first-match, so a second row would make owner-vs-caregiver routing depend on
+  // order). Idempotent: an existing Caregiver membership is returned unchanged.
+  const mine = await realMembershipRole(target.diaryId);
+  if (mine === "owner") return null;
+  if (mine === "caregiver") {
+    return { accountId: acct.id, diaryId: target.diaryId, role: "caregiver" };
+  }
+  const supabase = supabaseBrowser();
+  // 1:1 (ADR-0007) is enforced by the `membership_one_caregiver_per_diary`
+  // partial unique index: a unique violation means the spot is already taken by
+  // someone else. A non-owner can't read that row (RLS), so the insert conflict —
+  // not a pre-check — is what rejects the second caregiver.
+  const { error } = await supabase
+    .from("membership")
+    .insert({ account_id: acct.id, diary_id: target.diaryId, role: "caregiver" });
+  if (error) return null;
+  return { accountId: acct.id, diaryId: target.diaryId, role: "caregiver" };
 }
 
 /**
@@ -1222,16 +1239,24 @@ export async function revokeHandoverLink(): Promise<Diary | null> {
     .eq("diary_id", cur.id)
     .eq("state", "active");
   if (error) throw error;
-  // Caregiver-unbinding + Past Caregiver retention stays on the localStorage
-  // mock until ticket 05 moves past_caregiver onto Supabase too.
-  const all = readMemberships();
-  const ending = all.filter((m) => m.diaryId === cur.id && m.role === "caregiver");
+  // Unbind the real (Supabase) Caregiver: capture who's ending first (owner-reads
+  // RLS, 0005), retain them as a Past Caregiver, then delete the membership
+  // (owner-ends RLS). Past Caregiver retention still writes the localStorage mock
+  // until PR B (ticket 05) moves past_caregiver onto Supabase.
+  const { data: ending } = await supabase
+    .from("membership")
+    .select("account_id")
+    .eq("diary_id", cur.id)
+    .eq("role", "caregiver");
   retainPastCaregivers(
     cur.id,
-    ending.map((m) => m.accountId)
+    (ending ?? []).map((m) => m.account_id)
   );
-  const remaining = all.filter((m) => !(m.diaryId === cur.id && m.role === "caregiver"));
-  write(MEMBERSHIPS_KEY, remaining);
+  await supabase
+    .from("membership")
+    .delete()
+    .eq("diary_id", cur.id)
+    .eq("role", "caregiver");
   return getDiaryById(cur.id);
 }
 
@@ -1347,7 +1372,9 @@ export async function setRating(
 export async function caregivingDiaries(): Promise<Diary[]> {
   const acct = await getAccount();
   if (!acct) return [];
-  const ids = readMemberships()
+  // Real caregiver memberships live in Supabase; demo ones (single-browser mock)
+  // still ride localStorage. getMemberships() merges both.
+  const ids = (await getMemberships())
     .filter((m) => m.accountId === acct.id && m.role === "caregiver")
     .map((m) => m.diaryId);
   const diaries = await Promise.all(ids.map((id) => getDiaryById(id)));
@@ -1419,8 +1446,14 @@ function buildDemoDiary(
 export async function ensureDemoCaregiving(): Promise<void> {
   const acct = await getAccount();
   if (!acct) return;
+  // No-op once the account holds ANY caregiver membership — real (Supabase) or
+  // demo (localStorage) — so a real join is never shadowed and demos never
+  // re-seed on top of it.
+  const alreadyHelps = (await getMemberships()).some(
+    (m) => m.accountId === acct.id && m.role === "caregiver"
+  );
+  if (alreadyHelps) return;
   const mems = readMemberships();
-  if (mems.some((m) => m.accountId === acct.id && m.role === "caregiver")) return;
 
   const demos = [
     buildDemoDiary(

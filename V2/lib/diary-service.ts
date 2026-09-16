@@ -998,6 +998,13 @@ export function handoverReadiness(diary: Diary): HandoverReadiness {
 export interface HandoverTarget {
   diaryId: string;
   petName: string;
+  /**
+   * Whether the pet already has a Caregiver (ADR-0007: one at a time). Computed
+   * server-side by /api/handover (service role) so a signed-out / non-owner
+   * visitor can be shown "already taken" up front — they cannot read the
+   * caregiver membership themselves under RLS.
+   */
+  taken: boolean;
 }
 
 /** A stable-per-browser anonymous id, so the public route can dedupe repeat opens. */

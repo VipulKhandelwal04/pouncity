@@ -50,7 +50,19 @@ export async function GET(request: Request) {
 
     await admin.from("handover_open").insert({ token_id: row.id, recipient_key: recipient });
 
-    return NextResponse.json({ target: { diaryId: row.diary_id, petName: diary.name } });
+    // Occupancy (ADR-0007: one Caregiver per pet). Reported as a bare boolean so
+    // the gate/Circle can show "already taken" to a signed-out or non-owner
+    // visitor — who can't read the caregiver membership under RLS — without
+    // leaking who that Caregiver is. Service role, so RLS doesn't hide the count.
+    const { count } = await admin
+      .from("membership")
+      .select("id", { count: "exact", head: true })
+      .eq("diary_id", row.diary_id)
+      .eq("role", "caregiver");
+
+    return NextResponse.json({
+      target: { diaryId: row.diary_id, petName: diary.name, taken: (count ?? 0) > 0 },
+    });
   }
 
   return NextResponse.json({ error: "token or code required" }, { status: 400 });

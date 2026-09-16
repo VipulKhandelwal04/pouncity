@@ -338,28 +338,98 @@ function mirrorAccount(account: Account): void {
   write(ACCOUNTS_KEY, accounts);
 }
 
-/* ---- in-memory nav cache -------------------------------------------------
+/* ---- nav cache (stale-while-revalidate) ----------------------------------
  * Every screen mount resolves the account and the diary, so without a cache
  * each navigation pays the full network round-trips again and the screen sits
- * on "Loading…". A short-TTL module cache makes repeat navigations render
- * instantly. Correctness: getDiaryById ALWAYS fetches fresh and writes
- * through, and every mutation in this file ends by calling it, so a write is
- * never followed by a stale read in this tab. The TTL only bounds staleness
- * from OTHER tabs/devices (e.g. a caregiver confirming a feed elsewhere).
+ * on "Loading…". The cache serves whatever it holds INSTANTLY; an entry older
+ * than the TTL is refreshed in the background for the next read rather than
+ * blocking this one. It is also persisted to sessionStorage (per-tab, cleared
+ * when the tab closes) so even a reload paints from the last-known state.
+ * Correctness: getDiaryById ALWAYS fetches fresh and writes through, and
+ * every mutation in this file ends by calling it, so a write is never
+ * followed by a stale read in this tab. Staleness from OTHER tabs/devices
+ * (e.g. a caregiver confirming a feed elsewhere) lasts at most one screen
+ * visit: serving a stale entry triggers the refresh that the next visit sees.
  */
 const NAV_CACHE_TTL_MS = 30_000;
+const NAV_CACHE_KEY = "pouncity_nav_cache_v1";
 let accountCache: { userId: string; account: Account; at: number } | null = null;
 let ownedIdCache: { userId: string; id: string | null; at: number } | null = null;
 const diaryCache = new Map<string, { diary: Diary; at: number }>();
+let navSeeded = false;
+const revalidating = new Set<string>();
 
 function cacheFresh(at: number): boolean {
   return Date.now() - at < NAV_CACHE_TTL_MS;
+}
+
+/** Fire `fn` in the background, once per key at a time. Never throws. */
+function revalidate(key: string, fn: () => Promise<unknown>): void {
+  if (revalidating.has(key)) return;
+  revalidating.add(key);
+  void fn()
+    .catch(() => {})
+    .finally(() => revalidating.delete(key));
+}
+
+/** Persist the current cache to sessionStorage (best-effort optimization). */
+function persistNav(): void {
+  if (!hasWindow()) return;
+  try {
+    const userId = accountCache?.userId ?? ownedIdCache?.userId;
+    if (!userId) {
+      window.sessionStorage.removeItem(NAV_CACHE_KEY);
+      return;
+    }
+    const ownedId =
+      ownedIdCache && ownedIdCache.userId === userId ? ownedIdCache.id : undefined;
+    const diary = ownedId ? (diaryCache.get(ownedId)?.diary ?? null) : null;
+    window.sessionStorage.setItem(
+      NAV_CACHE_KEY,
+      JSON.stringify({ userId, account: accountCache?.account ?? null, ownedId, diary })
+    );
+  } catch {
+    /* private mode / quota — the cache is only an optimization */
+  }
+}
+
+/** Seed the in-memory cache from sessionStorage, once, as STALE entries
+ *  (at: 0) — served instantly, refreshed in the background. */
+function seedNavFromSession(userId: string): void {
+  if (navSeeded || !hasWindow()) return;
+  navSeeded = true;
+  try {
+    const raw = window.sessionStorage.getItem(NAV_CACHE_KEY);
+    if (!raw) return;
+    const p = JSON.parse(raw) as {
+      userId?: string;
+      account?: Account | null;
+      ownedId?: string | null;
+      diary?: Diary | null;
+    };
+    if (p.userId !== userId) return;
+    if (p.account && !accountCache) accountCache = { userId, account: p.account, at: 0 };
+    if (p.ownedId !== undefined && !ownedIdCache)
+      ownedIdCache = { userId, id: p.ownedId, at: 0 };
+    if (p.diary && !diaryCache.has(p.diary.id))
+      diaryCache.set(p.diary.id, { diary: p.diary, at: 0 });
+  } catch {
+    /* corrupt entry — ignore */
+  }
 }
 
 function bustNavCaches(): void {
   accountCache = null;
   ownedIdCache = null;
   diaryCache.clear();
+  navSeeded = false;
+  if (hasWindow()) {
+    try {
+      window.sessionStorage.removeItem(NAV_CACHE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /**
@@ -377,6 +447,44 @@ async function sessionUserId(): Promise<string | null> {
   return session?.user.id ?? null;
 }
 
+const ACCOUNT_COLUMNS = "id,name,email,phone,emergency_phone";
+
+type AccountRow = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  emergency_phone: string | null;
+};
+
+function mapAccountRow(row: AccountRow): Account {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    emergencyPhone: row.emergency_phone,
+  };
+}
+
+async function fetchAccount(user: { id: string; email?: string | null }): Promise<Account> {
+  const supabase = supabaseBrowser();
+  const { data } = await supabase
+    .from("account")
+    .select(ACCOUNT_COLUMNS)
+    .eq("id", user.id)
+    .maybeSingle();
+  // The account row is created by a DB trigger on signup; if it hasn't landed
+  // yet (a rare race right after first sign-in), fall back to the session.
+  const account: Account = data
+    ? mapAccountRow(data as AccountRow)
+    : { id: user.id, name: "", email: user.email ?? "" };
+  mirrorAccount(account);
+  accountCache = { userId: user.id, account, at: Date.now() };
+  persistNav();
+  return account;
+}
+
 /** The signed-in account, or null when signed out. `name` is "" until captured. */
 export async function getAccount(): Promise<Account | null> {
   ensureMigrated();
@@ -386,28 +494,12 @@ export async function getAccount(): Promise<Account | null> {
   } = await supabase.auth.getSession();
   const user = session?.user;
   if (!user) return null;
-  if (accountCache && accountCache.userId === user.id && cacheFresh(accountCache.at)) {
+  seedNavFromSession(user.id);
+  if (accountCache && accountCache.userId === user.id) {
+    if (!cacheFresh(accountCache.at)) revalidate("account", () => fetchAccount(user));
     return accountCache.account;
   }
-  const { data } = await supabase
-    .from("account")
-    .select("id,name,email,phone,emergency_phone")
-    .eq("id", user.id)
-    .maybeSingle();
-  // The account row is created by a DB trigger on signup; if it hasn't landed
-  // yet (a rare race right after first sign-in), fall back to the session.
-  const account: Account = data
-    ? {
-        id: data.id,
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        emergencyPhone: data.emergency_phone,
-      }
-    : { id: user.id, name: "", email: user.email ?? "" };
-  mirrorAccount(account);
-  accountCache = { userId: user.id, account, at: Date.now() };
-  return account;
+  return fetchAccount(user);
 }
 
 /**
@@ -431,18 +523,13 @@ export async function updateProfile(fields: {
     .from("account")
     .update(updates)
     .eq("id", userId)
-    .select("id,name,email,phone,emergency_phone")
+    .select(ACCOUNT_COLUMNS)
     .maybeSingle();
   if (error || !data) return null;
-  const account: Account = {
-    id: data.id,
-    name: data.name,
-    email: data.email,
-    phone: data.phone,
-    emergencyPhone: data.emergency_phone,
-  };
+  const account = mapAccountRow(data as AccountRow);
   mirrorAccount(account);
   accountCache = { userId, account, at: Date.now() }; // write-through
+  persistNav();
   return account;
 }
 
@@ -511,6 +598,7 @@ export async function setAccountName(name: string): Promise<Account | null> {
   if (!data) return null;
   mirrorAccount(data as Account);
   accountCache = null; // partial column select — let the next getAccount refetch
+  persistNav();
   return data as Account;
 }
 
@@ -541,13 +629,7 @@ export async function getMemberships(): Promise<Membership[]> {
   }));
 }
 
-/** The diary id this account owns (the owner-app has exactly one), or null. */
-async function ownedDiaryId(): Promise<string | null> {
-  const userId = await sessionUserId();
-  if (!userId) return null;
-  if (ownedIdCache && ownedIdCache.userId === userId && cacheFresh(ownedIdCache.at)) {
-    return ownedIdCache.id;
-  }
+async function fetchOwnedId(userId: string): Promise<string | null> {
   const supabase = supabaseBrowser();
   const { data } = await supabase
     .from("membership")
@@ -557,7 +639,20 @@ async function ownedDiaryId(): Promise<string | null> {
     .maybeSingle();
   const id = data?.diary_id ?? null;
   ownedIdCache = { userId, id, at: Date.now() };
+  persistNav();
   return id;
+}
+
+/** The diary id this account owns (the owner-app has exactly one), or null. */
+async function ownedDiaryId(): Promise<string | null> {
+  const userId = await sessionUserId();
+  if (!userId) return null;
+  seedNavFromSession(userId);
+  if (ownedIdCache && ownedIdCache.userId === userId) {
+    if (!cacheFresh(ownedIdCache.at)) revalidate("ownedId", () => fetchOwnedId(userId));
+    return ownedIdCache.id;
+  }
+  return fetchOwnedId(userId);
 }
 
 /* ---- diary read/write (Supabase, ticket 02) ------------------------------ */
@@ -676,7 +771,10 @@ export async function getDiary(): Promise<Diary | null> {
   const id = await ownedDiaryId();
   if (!id) return null;
   const hit = diaryCache.get(id);
-  if (hit && cacheFresh(hit.at)) return hit.diary;
+  if (hit) {
+    if (!cacheFresh(hit.at)) revalidate(`diary:${id}`, () => getDiaryById(id));
+    return hit.diary;
+  }
   return getDiaryById(id);
 }
 
@@ -722,6 +820,7 @@ export async function createDiary(core: DiaryCore): Promise<Diary> {
     .insert({ account_id: user.id, diary_id: id, role: "owner" });
   if (memErr) throw memErr;
   ownedIdCache = { userId: user.id, id, at: Date.now() }; // a cached "no diary" is now wrong
+  persistNav();
 
   if (core.photoUrl) {
     const path = await resolveUpload("pet-photos", id, core.photoUrl);
@@ -821,6 +920,7 @@ export async function removeDiary(): Promise<boolean> {
 
   ownedIdCache = null;
   diaryCache.delete(id);
+  persistNav();
 
   // Clear the local shadow + per-diary UI prefs for the removed diary.
   const diaries = readDiaries();
@@ -1664,6 +1764,7 @@ export async function getDiaryById(diaryId: string): Promise<Diary | null> {
       : null,
   };
   diaryCache.set(diaryId, { diary: result, at: Date.now() });
+  persistNav();
   return result;
 }
 

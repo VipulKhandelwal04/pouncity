@@ -39,7 +39,7 @@ export default function GroomingPage() {
       }
       setDiary(d);
       setCoat(d.coatType ?? "");
-      setRemind(await getGroomReminderFor(d.id));
+      void getGroomReminderFor(d.id).then(setRemind); // don't block first paint
       setStep(d.groomingGuide ? "view" : "intro");
     }
     run();

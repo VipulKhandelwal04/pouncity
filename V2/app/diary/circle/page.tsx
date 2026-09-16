@@ -61,7 +61,7 @@ export default function CirclePage() {
 
   useEffect(() => {
     async function run() {
-      const acct = await getAccount();
+      const [acct, owned] = await Promise.all([getAccount(), getDiary()]);
       if (!acct) {
         router.replace("/sign-in?next=" + encodeURIComponent("/diary/circle"));
         return;
@@ -70,18 +70,23 @@ export default function CirclePage() {
         router.replace("/diary/welcome");
         return;
       }
-      const owned = await getDiary();
       // A signed-in account can always reach the Circle — it is also where you enter
       // a code to help with someone's pet, so a 0-caregiving account is not bounced.
-      const cg = owned ? await diaryCaregiver(owned.id) : null;
-      const past = owned ? await pastCaregivers(owned.id) : [];
+      // The caregiver/past/helping reads are independent, so one parallel batch.
+      const [cg, past, helpingList] = await Promise.all([
+        owned ? diaryCaregiver(owned.id) : Promise.resolve(null),
+        owned ? pastCaregivers(owned.id) : Promise.resolve([]),
+        caregivingDiaries(),
+      ]);
       setAccount(acct);
       setDiary(owned);
       setCaregiver(cg);
       setPastHelpers(past);
-      setHelping(await caregivingDiaries());
+      setHelping(helpingList);
       setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+      setReady(true);
 
+      // Ratings decorate the helper rows; they load after first paint.
       if (owned) {
         const ids = [cg?.id, ...past.map((p) => p.account.id)].filter(
           (id): id is string => !!id
@@ -91,8 +96,6 @@ export default function CirclePage() {
         );
         setRatings(Object.fromEntries(entries));
       }
-
-      setReady(true);
     }
     run();
   }, [router]);

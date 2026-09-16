@@ -6,16 +6,15 @@ import {
   getDiary,
   updateProfile,
   removeDiary,
-  signOut,
   type Account,
   type Diary,
 } from "@/lib/diary-service";
 
 /**
- * The profile drawer — slides in from the right when the header's profile chip
- * is tapped. Holds the account details (name, email, phone, emergency
- * contact), Sign out, and the remove-pet flow with its two-step warning.
- * Closes on the backdrop, the ✕, or Escape.
+ * The profile drawer — opened from the account menu's "Profile" item. Holds
+ * the account details (name, email, phone, emergency contact) and the
+ * remove-pet flow with its two-step warning. Sign out lives in the account
+ * menu, not here. Closes on the backdrop, the ✕, or Escape.
  */
 export function ProfileDrawer({
   account,
@@ -81,11 +80,6 @@ export function ProfileDrawer({
     }
     onAccountChange(updated);
     setSaveMsg("Saved.");
-  }
-
-  async function handleSignOut() {
-    await signOut();
-    window.location.href = "/sign-in";
   }
 
   async function handleRemove() {
@@ -226,20 +220,6 @@ export function ProfileDrawer({
               </span>
             )}
           </div>
-        </section>
-
-        {/* sign out */}
-        <section style={{ display: "grid", gap: 12 }}>
-          <span className="mono" style={{ color: "var(--ink-72)" }}>
-            Session
-          </span>
-          <button
-            className="pill pill--ghost"
-            onClick={handleSignOut}
-            style={{ justifySelf: "start" }}
-          >
-            Sign out
-          </button>
         </section>
 
         {/* remove pet */}

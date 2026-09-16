@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fredoka, DM_Sans, DM_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { BfcacheGuard } from "@/components/BfcacheGuard";
 import { PwaSetup } from "@/components/PwaSetup";
 import "./globals.css";
@@ -75,6 +76,7 @@ export default function RootLayout({
         <BfcacheGuard />
         <PwaSetup />
         {children}
+        <Analytics />
       </body>
     </html>
   );

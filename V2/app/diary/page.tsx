@@ -35,8 +35,10 @@ export default function DiaryHome() {
   useEffect(() => {
     async function run() {
       // A person can be an owner AND a caregiver, so the home holds both:
-      // "Your pet" (if they own one) and "Helping with".
-      const acct = await getAccount();
+      // "Your pet" (if they own one) and "Helping with". First paint gates
+      // only on the (cached) account + diary; the caregiver line and the
+      // "Helping with" list fill in after render rather than blocking it.
+      const [acct, owned] = await Promise.all([getAccount(), getDiary()]);
       if (!acct) {
         router.replace("/sign-in?next=" + encodeURIComponent("/diary"));
         return;
@@ -45,18 +47,22 @@ export default function DiaryHome() {
         router.replace("/diary/welcome"); // first sign-in → capture a display name
         return;
       }
-      const owned = await getDiary();
-      if (owned) {
-        setCaregiver(await diaryCaregiver(owned.id));
-      } else if ((await caregivingDiaries()).length === 0) {
-        router.replace("/diary/create"); // no pet, not helping anyone → onboard an owner
-        return;
+      if (!owned) {
+        const helpingNow = await caregivingDiaries();
+        if (helpingNow.length === 0) {
+          router.replace("/diary/create"); // no pet, not helping anyone → onboard an owner
+          return;
+        }
+        setHelping(helpingNow);
       }
+      setNudgeHidden(await isNudgeDismissed()); // localStorage — effectively instant
       setAccount(acct);
       setDiary(owned);
-      setHelping(await caregivingDiaries());
-      setNudgeHidden(await isNudgeDismissed());
       setReady(true);
+      if (owned) {
+        void diaryCaregiver(owned.id).then(setCaregiver);
+        void caregivingDiaries().then(setHelping);
+      }
     }
     run();
   }, [router]);

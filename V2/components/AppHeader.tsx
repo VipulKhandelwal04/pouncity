@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Wordmark } from "./Wordmark";
+import { ProfileMenu } from "./ProfileMenu";
 import { ProfileDrawer } from "./ProfileDrawer";
 import { type Account } from "@/lib/diary-service";
 
 export function AppHeader({ account }: { account: Account | null }) {
   // Local copy so a profile save in the drawer updates the chip immediately.
   const [acct, setAcct] = useState(account);
-  const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   useEffect(() => setAcct(account), [account]);
 
   const initial = (acct?.name || acct?.email || "?").trim().charAt(0).toUpperCase();
@@ -27,82 +29,83 @@ export function AppHeader({ account }: { account: Account | null }) {
     >
       <Wordmark />
       {acct ? (
-        <>
+        <span style={{ position: "relative", display: "inline-block" }}>
           <button
             type="button"
-            onClick={() => setOpen(true)}
-            aria-label="Open your profile"
-            aria-haspopup="dialog"
+            onClick={() => setMenuOpen((o) => !o)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-label="Account menu"
             title={acct.email}
             style={{
               display: "flex",
               alignItems: "center",
               gap: 10,
               minWidth: 0,
-              background: "none",
-              border: "none",
-              padding: 0,
+              minHeight: 46,
+              padding: "4px 5px 4px 14px",
+              background: "var(--panel)",
+              border: "var(--border)",
+              borderRadius: 999,
               cursor: "pointer",
               font: "inherit",
               color: "inherit",
             }}
           >
-            <span
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "flex-end",
-                minWidth: 0,
-                lineHeight: 1.2,
-              }}
-            >
-              {acct.name && (
-                <span
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontWeight: 600,
-                    fontSize: "0.9rem",
-                    maxWidth: 150,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {acct.name}
-                </span>
-              )}
-              <span className="mono" style={{ fontSize: "0.6rem", color: "var(--ink-72)" }}>
-                Profile
+            {acct.name && (
+              <span
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontWeight: 600,
+                  fontSize: "0.9rem",
+                  maxWidth: 140,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {acct.name}
               </span>
-            </span>
+            )}
             <span
               aria-hidden="true"
               style={{
                 display: "grid",
                 placeItems: "center",
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 flex: "0 0 auto",
                 borderRadius: "50%",
                 border: "var(--border-thin)",
                 background: "var(--sun)",
                 fontFamily: "var(--font-display)",
                 fontWeight: 600,
-                fontSize: "1rem",
+                fontSize: "0.95rem",
                 color: "var(--ink)",
               }}
             >
               {initial}
             </span>
           </button>
-          <ProfileDrawer
+          <ProfileMenu
             account={acct}
-            open={open}
-            onClose={() => setOpen(false)}
-            onAccountChange={setAcct}
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            onOpenProfile={() => {
+              setMenuOpen(false);
+              setDrawerOpen(true);
+            }}
           />
-        </>
+        </span>
       ) : null}
+      {acct && (
+        <ProfileDrawer
+          account={acct}
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          onAccountChange={setAcct}
+        />
+      )}
     </header>
   );
 }

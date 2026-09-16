@@ -62,8 +62,8 @@ export function PetAvatar({
 function DogHead() {
   return (
     <g>
-      {/* pointy ear (back) */}
-      <path d="M28 44 Q20 14 40 26 Q42 40 34 50 Z" fill="var(--ink)" />
+      {/* floppy folded ear (back) — every dog ear droops, per the construction rule */}
+      <path d="M26 48 Q13 34 19 22 Q28 13 40 24 Q44 38 36 50 Z" fill="var(--ink)" />
       {/* floppy folded ear (front) */}
       <path d="M92 40 Q104 20 100 46 Q96 62 82 56 Q80 46 92 40 Z" fill="var(--ink)" />
       {/* head + tapered muzzle as one fluid mass */}
@@ -77,8 +77,8 @@ function DogHead() {
         fill="var(--ink)"
       />
       {/* eyes — white, nearly touching */}
-      <circle cx="50" cy="56" r="9" fill="#fff" />
-      <circle cx="70" cy="56" r="9" fill="#fff" />
+      <circle cx="50" cy="56" r="9" fill="var(--eye-white)" />
+      <circle cx="70" cy="56" r="9" fill="var(--eye-white)" />
       <circle cx="52" cy="58" r="4.2" fill="var(--ink)" />
       <circle cx="68" cy="58" r="4.2" fill="var(--ink)" />
       {/* blunt coral nose */}
@@ -96,8 +96,8 @@ function CatHead() {
       {/* round head */}
       <circle cx="60" cy="62" r="34" fill="var(--ink)" />
       {/* eyes nearly touching */}
-      <circle cx="50" cy="58" r="8.5" fill="#fff" />
-      <circle cx="70" cy="58" r="8.5" fill="#fff" />
+      <circle cx="50" cy="58" r="8.5" fill="var(--eye-white)" />
+      <circle cx="70" cy="58" r="8.5" fill="var(--eye-white)" />
       <circle cx="52" cy="60" r="4" fill="var(--ink)" />
       <circle cx="68" cy="60" r="4" fill="var(--ink)" />
       {/* coral nose + whiskers */}

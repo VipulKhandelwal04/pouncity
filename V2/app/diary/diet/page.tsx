@@ -2,11 +2,12 @@
 
 import { BrandLoader } from "@/components/BrandLoader";
 
-import { useEffect, useState } from "react";
+import { Children, cloneElement, isValidElement, useEffect, useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DetailShell } from "@/components/DetailShell";
 import { Disclaimer } from "@/components/Disclaimer";
 import { StalePlanNudge } from "@/components/StalePlanNudge";
+import { YarnSpinner } from "@/components/YarnSpinner";
 import {
   getDiary,
   requestDietPlan,
@@ -203,8 +204,9 @@ export default function DietPage() {
       {step === "capture" && (
         <div style={{ display: "grid", gap: 16 }}>
           <div className="form-field" style={{ margin: 0 }}>
-            <label>What are you feeding {diary.name} right now?</label>
+            <label htmlFor="diet-current-food">What are you feeding {diary.name} right now?</label>
             <input
+              id="diet-current-food"
               className="input"
               value={food}
               onChange={(e) => setFood(e.target.value)}
@@ -232,7 +234,7 @@ export default function DietPage() {
 
       {step === "working" && (
         <div className="card" style={{ textAlign: "center", padding: "40px 20px" }}>
-          <div className="spinner" />
+          <YarnSpinner />
           <p style={{ marginTop: 16, color: "var(--ink-72)" }}>
             Building {diary.name}&rsquo;s plan…
           </p>
@@ -314,10 +316,20 @@ export default function DietPage() {
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  // Bind the label to the first form control so screen readers announce it.
+  const id = useId();
+  let bound = false;
+  const kids = Children.map(children, (c) => {
+    if (!bound && isValidElement(c) && (c.type === "input" || c.type === "textarea" || c.type === "select")) {
+      bound = true;
+      return cloneElement(c as React.ReactElement<{ id?: string }>, { id });
+    }
+    return c;
+  });
   return (
     <div className="form-field" style={{ margin: 0 }}>
-      <label>{label}</label>
-      {children}
+      <label htmlFor={id}>{label}</label>
+      {kids}
     </div>
   );
 }

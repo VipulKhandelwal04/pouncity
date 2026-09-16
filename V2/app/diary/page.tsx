@@ -241,8 +241,8 @@ function OwnerHubBody({
               style={{
                 display: "grid",
                 placeItems: "center",
-                width: 36,
-                height: 36,
+                width: 44,
+                height: 44,
                 flex: "0 0 auto",
                 borderRadius: 999,
                 border: "none",
@@ -395,7 +395,7 @@ function OwnerHubBody({
                     <button
                       type="button"
                       onClick={() => openCertificate(diary.rabies!.certificateUrl!)}
-                      className="mono"
+                      className="mono tap-target"
                       style={{
                         marginTop: 10,
                         padding: 0,

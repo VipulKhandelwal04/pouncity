@@ -167,10 +167,7 @@ export default function HandoverGate() {
       <PublicHeader />
       <main className="app-shell" style={{ paddingTop: 20, maxWidth: 480 }}>
         <div className="card" style={{ display: "grid", gap: 16, padding: "30px 24px" }}>
-          <span className="mono" style={{ color: "var(--ink-72)" }}>
-            You&rsquo;ve been invited to help
-          </span>
-
+          {/* no kicker above the heading (No Kicker Rule); the copy below carries the invitation */}
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <PawMark />
             <h1 style={{ fontSize: "clamp(1.7rem, 7vw, 2.2rem)", lineHeight: 1.1 }}>

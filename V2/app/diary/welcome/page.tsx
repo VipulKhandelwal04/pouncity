@@ -96,7 +96,11 @@ function Welcome() {
             placeholder="e.g. Alex"
             aria-invalid={!!error}
           />
-          {error && <div className="field-msg">{error}</div>}
+          {error && (
+            <div className="field-msg" role="alert">
+              {error}
+            </div>
+          )}
         </div>
 
         <button

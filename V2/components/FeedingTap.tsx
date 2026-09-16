@@ -82,7 +82,7 @@ export function FeedingTap({
           padding: "clamp(20px, 5vw, 28px)",
         }}
       >
-        <span className="mono" style={{ color: "var(--sun-ghost)" }}>
+        <span className="mono" style={{ color: "#6B4A00" /* AA (5.25:1) on the sun field; sun-ghost is 3.39:1 */ }}>
           Today
         </span>
         <h2 style={{ fontSize: "clamp(1.4rem, 5.5vw, 1.9rem)", margin: "6px 0 16px" }}>
@@ -120,7 +120,7 @@ export function FeedingTap({
                   {entry?.by ? `  ·  by ${entry.by}` : ""}
                 </span>
               </span>
-              <button type="button" onClick={undo} className="mono" style={{ color: "var(--coral-text)" }}>
+              <button type="button" onClick={undo} className="mono tap-target" style={{ color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3 }}>
                 Undo
               </button>
             </div>
@@ -133,6 +133,7 @@ export function FeedingTap({
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
                   placeholder="Extra treats today, half a bowl…"
+                  aria-label="Note about today's feed"
                   autoFocus
                 />
                 <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
@@ -166,7 +167,7 @@ export function FeedingTap({
                 }}
               >
                 <span style={{ fontStyle: "italic" }}>&ldquo;{entry.note}&rdquo;</span>{" "}
-                <span className="mono" style={{ color: "var(--coral-text)" }}>
+                <span className="mono" style={{ color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3 }}>
                   edit
                 </span>
               </button>
@@ -174,8 +175,8 @@ export function FeedingTap({
               <button
                 type="button"
                 onClick={() => setNoteOpen(true)}
-                className="mono"
-                style={{ display: "block", marginTop: 12, color: "var(--coral-text)" }}
+                className="mono tap-target"
+                style={{ marginTop: 12, color: "var(--ink)", textDecoration: "underline", textUnderlineOffset: 3 }}
               >
                 + Add a note
               </button>

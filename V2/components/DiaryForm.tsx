@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Children, cloneElement, isValidElement, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PetAvatar } from "./PetAvatar";
@@ -517,10 +517,20 @@ function Field({
   error?: string;
   children: React.ReactNode;
 }) {
+  // Bind the label to the first form control so screen readers announce it.
+  const id = useId();
+  let bound = false;
+  const kids = Children.map(children, (c) => {
+    if (!bound && isValidElement(c) && (c.type === "input" || c.type === "textarea" || c.type === "select")) {
+      bound = true;
+      return cloneElement(c as React.ReactElement<{ id?: string }>, { id });
+    }
+    return c;
+  });
   return (
     <div className="form-field">
-      <label>{label}</label>
-      {children}
+      <label htmlFor={id}>{label}</label>
+      {kids}
       {error && (
         <p className="field-msg" role="alert">
           {error}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { signOut, type Account } from "@/lib/diary-service";
 
 /**
@@ -20,13 +20,34 @@ export function ProfileMenu({
   onClose: () => void;
   onOpenProfile: () => void;
 }) {
+  // Focus management: opening moves focus to the first item, arrows cycle,
+  // Escape closes, and closing returns focus to whatever opened the menu.
+  const menuRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!open) return;
+    openerRef.current = document.activeElement as HTMLElement | null;
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []
+    );
+    items[0]?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if ((e.key !== "ArrowDown" && e.key !== "ArrowUp") || items.length === 0) return;
+      e.preventDefault();
+      const i = items.indexOf(document.activeElement as HTMLElement);
+      const next =
+        e.key === "ArrowDown" ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+      items[next].focus();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      openerRef.current?.focus();
+    };
   }, [open, onClose]);
 
   async function handleSignOut() {
@@ -49,6 +70,7 @@ export function ProfileMenu({
       />
       <div
         role="menu"
+        ref={menuRef}
         aria-hidden={!open}
         style={{
           position: "absolute",
@@ -64,7 +86,10 @@ export function ProfileMenu({
           gap: 2,
           opacity: open ? 1 : 0,
           transform: open ? "translateY(0)" : "translateY(-6px)",
-          transition: "opacity .16s ease, transform .16s ease",
+          // visibility drops the closed menu out of the tab order and the
+          // accessibility tree (opacity alone leaves it focusable-while-hidden)
+          visibility: open ? "visible" : "hidden",
+          transition: "opacity .16s ease, transform .16s ease, visibility .16s",
           pointerEvents: open ? "auto" : "none",
         }}
       >

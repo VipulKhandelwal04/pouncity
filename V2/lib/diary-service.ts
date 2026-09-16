@@ -1826,6 +1826,32 @@ export async function setRating(
   return getRating(caregiverAccountId, diaryId);
 }
 
+/** The owner's contact card for a sitter or caregiver on this diary. */
+export interface OwnerContact {
+  name: string;
+  phone: string | null;
+  emergencyPhone: string | null;
+}
+
+/**
+ * The owner's name and contact numbers for a diary the current person is a
+ * member of, so a caregiver can reach the owner fast. Backed by the
+ * `diary_owner_contact` RPC (SECURITY DEFINER, membership-gated): a caregiver
+ * can't read the owner's account or membership rows under plain RLS, and
+ * non-members get no rows.
+ */
+export async function diaryOwnerContact(diaryId: string): Promise<OwnerContact | null> {
+  const supabase = supabaseBrowser();
+  const { data } = await supabase.rpc("diary_owner_contact", { p_diary_id: diaryId });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return {
+    name: row.name ?? "",
+    phone: row.phone ?? null,
+    emergencyPhone: row.emergency_phone ?? null,
+  };
+}
+
 /* ---- caregiving ("Helping with") ---------------------------------------- */
 
 /** Diaries the signed-in account helps with (caregiver role). */

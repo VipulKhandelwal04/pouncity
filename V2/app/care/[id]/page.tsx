@@ -10,8 +10,10 @@ import {
   getDiaryById,
   roleOnDiary,
   feedingHistory,
+  diaryOwnerContact,
   type Account,
   type Diary,
+  type OwnerContact,
 } from "@/lib/diary-service";
 
 /**
@@ -38,6 +40,7 @@ export default function CaregiverView() {
   const [status, setStatus] = useState<Status>("loading");
   const [diary, setDiary] = useState<Diary | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
+  const [owner, setOwner] = useState<OwnerContact | null>(null);
 
   useEffect(() => {
     async function run() {
@@ -59,6 +62,7 @@ export default function CaregiverView() {
       }
       setAccount(acct);
       setDiary(d);
+      setOwner(await diaryOwnerContact(id)); // membership-gated RPC
       setStatus("view");
     }
     run();
@@ -251,6 +255,52 @@ export default function CaregiverView() {
             </h2>
             <div className="card" style={{ marginBottom: 26 }}>
               <p style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{diary.quirks}</p>
+            </div>
+          </>
+        )}
+
+        {/* owner — the first person to reach; numbers come from their profile */}
+        {owner && (owner.phone || owner.emergencyPhone) && (
+          <>
+            <h2 className="mono" style={{ display: "block", marginBottom: 10 }}>
+              Owner
+            </h2>
+            <div className="card" style={{ marginBottom: 26 }}>
+              <strong style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}>
+                {owner.name || `${diary.name}'s owner`}
+              </strong>
+              <div
+                style={{
+                  color: "var(--ink-72)",
+                  fontSize: "0.9rem",
+                  marginTop: 2,
+                  display: "grid",
+                  gap: 4,
+                }}
+              >
+                {owner.phone && (
+                  <div>
+                    Phone:{" "}
+                    <a
+                      href={`tel:${owner.phone.replace(/[^\d+]/g, "")}`}
+                      style={{ color: "var(--coral-text)" }}
+                    >
+                      {owner.phone}
+                    </a>
+                  </div>
+                )}
+                {owner.emergencyPhone && (
+                  <div>
+                    Emergency contact:{" "}
+                    <a
+                      href={`tel:${owner.emergencyPhone.replace(/[^\d+]/g, "")}`}
+                      style={{ color: "var(--coral-text)" }}
+                    >
+                      {owner.emergencyPhone}
+                    </a>
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}

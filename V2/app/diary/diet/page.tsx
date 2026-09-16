@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { DetailShell } from "@/components/DetailShell";
 import { Disclaimer } from "@/components/Disclaimer";
 import { getDiary, requestDietPlan, saveDietPlan, type Diary } from "@/lib/diary-service";
+import { track } from "@/lib/analytics";
 
 type Step = "loading" | "intro" | "manual" | "capture" | "working" | "view" | "error";
 
@@ -35,6 +36,12 @@ export default function DietPage() {
     run();
   }, [router]);
 
+  // Analytics (ticket 11): a diet plan being shown is a "viewed" event.
+  useEffect(() => {
+    if (step === "view" && diary?.dietPlan) void track("diet_plan_viewed", { diaryId: diary.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, diary?.id]);
+
   // AI "generation" runs on entering the working step (canned; AI Gateway later)
   useEffect(() => {
     if (step !== "working") return;
@@ -46,6 +53,7 @@ export default function DietPage() {
         setStep("error");
         return;
       }
+      void track("diet_plan_generated", { diaryId: d.id, props: { source: d.dietPlan?.source } });
       setDiary(d);
       setStep("view");
     }, 1200);

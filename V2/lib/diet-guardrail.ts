@@ -9,7 +9,10 @@
  *    templated plan) — we don't try to partially rewrite medical claims.
  *  - The daily portion is CLAMPED to a sane grams-per-kg band for the species,
  *    so an out-of-range number can never reach the owner.
+ *  - Em dashes are stripped from the copy (noEmDash, shared with grooming).
  */
+
+import { noEmDash } from "./text";
 
 export type Species = "dog" | "cat";
 
@@ -51,21 +54,6 @@ const GRAMS_PER_KG: Record<Species, [number, number]> = {
   dog: [10, 35],
   cat: [12, 30],
 };
-
-/**
- * Strip em dashes from model copy — the brand forbids them (classic AI slop).
- * En dashes in numeric ranges like "4-6 weeks" are allowed and left untouched;
- * only the em dash (U+2014), horizontal bar (U+2015), and spaced double-hyphens
- * are replaced (with a comma), then whitespace and doubled commas are tidied.
- */
-function noEmDash(s: string): string {
-  return s
-    .replace(/\s*[—―]\s*/g, ", ")
-    .replace(/ -- /g, ", ")
-    .replace(/\s*,\s*,\s*/g, ", ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 export function applyDietGuardrail(
   raw: RawDietSuggestion,

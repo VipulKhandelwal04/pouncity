@@ -8,8 +8,9 @@ import {
   getDiary,
   requestGroomingGuide,
   saveGroomingGuide,
-  getGroomReminder,
-  setGroomReminder,
+  getGroomReminderFor,
+  setGroomReminderFor,
+  subscribeToPush,
   type Diary,
 } from "@/lib/diary-service";
 
@@ -38,7 +39,7 @@ export default function GroomingPage() {
       }
       setDiary(d);
       setCoat(d.coatType ?? "");
-      setRemind(await getGroomReminder());
+      setRemind(await getGroomReminderFor(d.id));
       setStep(d.groomingGuide ? "view" : "intro");
     }
     run();
@@ -64,9 +65,13 @@ export default function GroomingPage() {
   }, [step, coat]);
 
   async function toggleRemind() {
+    if (!diary) return;
     const v = !remind;
     setRemind(v);
-    await setGroomReminder(v);
+    await setGroomReminderFor(diary.id, v);
+    // Turning a reminder on is the push opt-in (best-effort); declining never
+    // undoes the preference or gates anything.
+    if (v) void subscribeToPush();
   }
 
   if (step === "loading" || !diary) {
